@@ -64,7 +64,7 @@ export default function DistrictAnalysis() {
     const [recommendations, setRecommendations] = useState<{ recommendations: Recommendation[] } | null>(null);
     const [signals, setSignals] = useState<{
         signals: {
-            weather: { data: { temperature: number; humidity: number; rainfall_lag_14d?: number } };
+            weather: { data: { temperature: number; humidity: number; rainfall_lag_14d?: number; is_real_data?: boolean } };
         };
         overall_risk: { score: number };
     } | null>(null);
@@ -140,6 +140,7 @@ export default function DistrictAnalysis() {
                         label="Temperature"
                         value={signals?.signals?.weather?.data?.temperature?.toFixed(1) || '--'}
                         unit="°C"
+                        isLive={signals?.signals?.weather?.data?.is_real_data}
                     />
                     <SignalCard
                         icon={<CloudRain size={16} />}
@@ -346,7 +347,8 @@ function SignalCard({
     value,
     unit,
     highlight,
-    status
+    status,
+    isLive
 }: {
     icon: React.ReactNode;
     label: string;
@@ -354,6 +356,7 @@ function SignalCard({
     unit: string;
     highlight?: boolean;
     status?: 'red' | 'orange' | 'yellow' | 'green';
+    isLive?: boolean;
 }) {
     const statusColors = {
         red: 'text-critical',
@@ -364,9 +367,15 @@ function SignalCard({
 
     return (
         <div className={cn(
-            "metric-card",
+            "metric-card relative",
             highlight && "border-[var(--accent)] border-opacity-50"
         )}>
+            {isLive && (
+                <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500/10 px-1.5 py-0.5 rounded text-[10px] text-green-500 font-medium animate-pulse">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    LIVE
+                </div>
+            )}
             <div className="flex items-center gap-2 mb-2">
                 <span className="text-muted">{icon}</span>
                 <span className="text-xs text-muted uppercase tracking-wide">{label}</span>

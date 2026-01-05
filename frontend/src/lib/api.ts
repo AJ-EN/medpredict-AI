@@ -21,8 +21,9 @@ export interface RiskScore {
         temperature: number;
         rainfall: number;
         humidity: number;
-        rainfall_7d: number;
         rainfall_14d: number;
+        condition?: string;
+        is_real_data?: boolean;
     };
 }
 
