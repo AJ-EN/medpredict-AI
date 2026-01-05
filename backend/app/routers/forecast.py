@@ -25,7 +25,7 @@ async def get_state_forecast(days_ahead: int = Query(14, ge=1, le=30)):
     results = {}
     for district_id in forecaster.districts.keys():
         risk = await forecaster.calculate_risk_score(district_id)
-        case_forecast = forecaster.forecast_cases(district_id, 'dengue', days_ahead)
+        case_forecast = await forecaster.forecast_cases(district_id, 'dengue', days_ahead)
         
         # Calculate total predicted cases
         total_cases = sum(f['predicted'] for f in case_forecast)
@@ -51,7 +51,7 @@ async def get_state_forecast(days_ahead: int = Query(14, ge=1, le=30)):
 async def get_district_forecast(
     district_id: str,
     disease: str = Query('dengue', description="Disease to forecast"),
-    days_ahead: int = Query(14, ge=1, le=30)
+    days_ahead: int = Query(28, ge=1, le=35)  # DeepMind Upgrade: Extended to 28 days
 ):
     """Get detailed case forecast for a district"""
     forecaster = get_forecaster()
@@ -59,7 +59,7 @@ async def get_district_forecast(
     if district_id not in forecaster.districts:
         raise HTTPException(status_code=404, detail=f"District {district_id} not found")
     
-    case_forecast = forecaster.forecast_cases(district_id, disease, days_ahead)
+    case_forecast = await forecaster.forecast_cases(district_id, disease, days_ahead)
     risk = await forecaster.calculate_risk_score(district_id)
     
     return {

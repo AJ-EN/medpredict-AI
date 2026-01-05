@@ -332,70 +332,159 @@ class CausalDemandForecaster:
             'causal_note': "Risk includes REAL-TIME weather data + 14-day causal lag"
         }
     
-    def forecast_cases(self, district_id: str, disease: str = 'dengue', days_ahead: int = 14) -> List[Dict]:
+    async def forecast_cases(self, district_id: str, disease: str = 'dengue', days_ahead: int = 28) -> List[Dict]:
         """
-        CAUSAL Forecast: Uses lagged weather features
+        DEEPMIND UPGRADE: Spliced Timeline Forecast
+        ============================================
         
-        To predict Day T, we use weather from Day T-14.
-        Since we KNOW weather from the past, we can predict the future.
+        FIRST PRINCIPLES:
+        - Biological Lag: Rain on Day 0 → Cases on Day 14
+        - Old Limit: We could only predict 14 days (using known past rain)
+        - New Power: By forecasting FUTURE rain, we can predict 28 days ahead!
+        
+        SPLICED TIMELINE:
+        Step A: Historical Weather (Known Past) from DB
+        Step B: Forecast Weather (Predicted Future) from WeatherService
+        Step C: Concat into continuous_weather DataFrame
+        Step D: Shift entire timeline by 14 days (rainfall_lag_14d)
+        Step E: Predict cases for T+1 to T+28
+        
+        SOURCE FLAGS:
+        - Days 1-14: "Observed Lag" (based on rain that already fell)
+        - Days 15-28: "AI Prediction (WeatherNext)" (based on forecast rain)
         """
         if district_id not in self.models:
-             # Fallback
-             return self._simple_forecast(district_id, disease, days_ahead)
-             
+            return self._simple_forecast(district_id, disease, days_ahead)
+        
         model_info = self.models[district_id]
         if model_info.get('type') != 'prophet':
-             return self._simple_forecast(district_id, disease, days_ahead)
-             
+            return self._simple_forecast(district_id, disease, days_ahead)
+        
         m = model_info['model']
+        district = self.districts.get(district_id, {})
         
-        # Create Future DataFrame
-        # We need regressor values for the future dates. 
-        # Since we use Lag-14, we actually KNOW the regressors for the next 14 days!
+        # =========================================================================
+        # STEP A: Get Historical Weather from DB (Known Past)
+        # =========================================================================
+        historical_weather = self.weather_df[
+            self.weather_df['district_id'] == district_id
+        ].sort_values('date').copy()
         
-        last_date = self.weather_df[self.weather_df['district_id'] == district_id]['date'].max()
-        future_dates = [last_date + pd.Timedelta(days=i) for i in range(1, days_ahead + 1)]
+        # =========================================================================
+        # STEP B: Fetch Forecast Weather from WeatherService (Predicted Future)
+        # =========================================================================
+        from app.services.weather_service import weather_service
+        
+        forecast_weather = []
+        if 'lat' in district and 'lng' in district:
+            try:
+                # Get 14-day weather forecast
+                forecast_data = await weather_service.get_forecast(
+                    district['lat'], 
+                    district['lng'], 
+                    district_id,
+                    days=14
+                )
+                
+                for fc in forecast_data:
+                    # Convert to same format as historical weather
+                    forecast_weather.append({
+                        'date': pd.to_datetime(fc['date']).tz_localize(None),
+                        'district_id': district_id,
+                        'rainfall': fc['rainfall_prediction'],
+                        'temperature': fc['temperature'],
+                        'humidity': fc['humidity'],
+                        'rainfall_probability': fc['rainfall_probability'],
+                        'source': fc['source'],
+                        'is_forecast': True
+                    })
+            except Exception as e:
+                print(f"Error fetching forecast for {district_id}: {e}")
+        
+        # =========================================================================
+        # STEP C: Splice Timeline (History + Forecast)
+        # =========================================================================
+        if forecast_weather:
+            forecast_df = pd.DataFrame(forecast_weather)
+            # Ensure date columns are compatible (strip timezone)
+            historical_weather['date'] = pd.to_datetime(historical_weather['date']).dt.tz_localize(None)
+            forecast_df['date'] = pd.to_datetime(forecast_df['date']).dt.tz_localize(None)
+            
+            # Mark historical data
+            historical_weather['is_forecast'] = False
+            historical_weather['source'] = 'observed'
+            historical_weather['rainfall_probability'] = 1.0  # 100% confidence in past
+            
+            # Concat: Historical + Forecast = Continuous Timeline
+            continuous_weather = pd.concat([historical_weather, forecast_df], ignore_index=True)
+            continuous_weather = continuous_weather.sort_values('date').drop_duplicates(subset=['date'], keep='last')
+        else:
+            continuous_weather = historical_weather.copy()
+            continuous_weather['is_forecast'] = False
+            continuous_weather['source'] = 'observed'
+            continuous_weather['rainfall_probability'] = 1.0
+        
+        # =========================================================================
+        # STEP D: Create Lagged Features on Spliced Timeline
+        # =========================================================================
+        continuous_weather['rainfall_lag_14d'] = continuous_weather['rainfall'].shift(14)
+        continuous_weather['breeding_index_lag'] = (
+            continuous_weather['rainfall'].shift(14) * 
+            continuous_weather['humidity'].shift(14) / 100
+        ).fillna(0)
+        
+        # =========================================================================
+        # STEP E: Generate Predictions for T+1 to T+28
+        # =========================================================================
+        last_historical_date = historical_weather['date'].max()
+        future_dates = [last_historical_date + pd.Timedelta(days=i) for i in range(1, days_ahead + 1)]
         future_df = pd.DataFrame({'ds': future_dates})
         
-        # Fill regressors
+        # Fill regressors from spliced timeline
         regressors = []
-        for date in future_dates:
+        source_flags = []
+        
+        for i, date in enumerate(future_dates):
             lag_date = date - pd.Timedelta(days=14)
-            weather_row = self.weather_df[
-                (self.weather_df['district_id'] == district_id) & 
-                (self.weather_df['date'] == lag_date)
-            ]
+            
+            # Look up in continuous (spliced) weather
+            weather_row = continuous_weather[continuous_weather['date'] == lag_date]
             
             if not weather_row.empty:
                 row = weather_row.iloc[0]
                 regressors.append({
-                    'rainfall_lag_14d': row.get('rainfall', 0), # note: in weather table it's current rainfall, so lag_14 is just 'rainfall' at t-14
-                    'breeding_index_lag': row.get('rainfall', 0) * row.get('humidity', 0) / 100
+                    'rainfall_lag_14d': row.get('rainfall', 0),
+                    'breeding_index_lag': row.get('rainfall', 0) * row.get('humidity', 50) / 100
                 })
+                
+                # Determine source: Was the lagged data from forecast or observation?
+                if row.get('is_forecast', False):
+                    source_flags.append("AI Prediction (WeatherNext)")
+                else:
+                    source_flags.append("Observed Lag")
             else:
-                # Fallback for >14 days (use average or 0)
+                # No data for this lag date - use fallback
                 regressors.append({
-                    'rainfall_lag_14d': 0, 
+                    'rainfall_lag_14d': 0,
                     'breeding_index_lag': 0
                 })
+                source_flags.append("No Data (Fallback)")
         
         reg_df = pd.DataFrame(regressors)
         future_df = pd.concat([future_df, reg_df], axis=1)
         
-        # Predict
+        # Run Prophet prediction
         forecast = m.predict(future_df)
         
-        # Format Output
+        # =========================================================================
+        # Format Output with Source Flags
+        # =========================================================================
         results = []
-        
-        # Get reporting rate based on district type
-        district_type = self.districts.get(district_id, {}).get('type', 'mixed')
+        district_type = district.get('type', 'mixed')
         reporting_rate = 0.6 if district_type == 'urban' else 0.3 if district_type == 'rural' else 0.45
-
-        for _, row in forecast.iterrows():
+        
+        for i, (_, row) in enumerate(forecast.iterrows()):
             pred = max(0, row['yhat'])
-            
-            # Prophet gives uncertainty bounds yhat_lower, yhat_upper
             lower = max(0, row['yhat_lower'])
             upper = max(0, row['yhat_upper'])
             
@@ -406,11 +495,13 @@ class CausalDemandForecaster:
                 'predicted': int(pred),
                 'lower_bound': int(lower),
                 'upper_bound': int(upper),
-                'confidence': 0.95, # Prophet typical
+                'confidence': 0.95,
                 'is_causal': True,
-                'estimated_actual': int(pred / reporting_rate)
+                'estimated_actual': int(pred / reporting_rate),
+                'source': source_flags[i] if i < len(source_flags) else "Unknown",
+                'days_ahead': i + 1
             })
-            
+        
         return results
     
     def _simple_forecast(self, district_id: str, disease: str, days_ahead: int) -> List[Dict]:
@@ -435,7 +526,7 @@ class CausalDemandForecaster:
             for i in range(1, days_ahead + 1)
         ]
     
-    def forecast_medicine_demand(self, district_id: str, medicine_id: str, days_ahead: int = 14) -> List[Dict]:
+    async def forecast_medicine_demand(self, district_id: str, medicine_id: str, days_ahead: int = 14) -> List[Dict]:
         """Convert case forecasts to medicine demand"""
         medicine = self.medicines.get(medicine_id)
         if not medicine:
@@ -446,7 +537,7 @@ class CausalDemandForecaster:
         
         for disease in medicine['diseases']:
             if disease in ['dengue', 'malaria', 'diarrhea']:
-                case_forecasts = self.forecast_cases(district_id, disease, days_ahead)
+                case_forecasts = await self.forecast_cases(district_id, disease, days_ahead)
                 for i, fc in enumerate(case_forecasts):
                     healthcare_rate = 0.6
                     demand = (
@@ -473,16 +564,36 @@ class CausalDemandForecaster:
             for i in range(days_ahead)
         ]
     
-    def calculate_safety_stock(self, district_id: str, medicine_id: str, lead_time_days: int = 7) -> int:
+    async def calculate_safety_stock(
+        self, 
+        district_id: str, 
+        medicine_id: str, 
+        lead_time_days: int = 7,
+        risk_probability: float = 0.5,
+        forecast_rainfall: float = 0.0
+    ) -> int:
         """
-        FIRST PRINCIPLES Safety Stock Calculation
+        DEEPMIND UPGRADE: Risk-Adjusted Safety Stock
+        =============================================
         
-        Formula: Safety Stock = Z × σ × √(Lead Time)
+        FIRST PRINCIPLES:
+        - Safety Stock = Z × σ × √(Lead Time)
+        - But this assumes NORMAL conditions...
         
-        Where:
-        - Z = Service level factor (1.96 for 97.5%)
-        - σ = Standard deviation of daily demand
-        - Lead Time = Days from order to delivery
+        BLACK SWAN ADJUSTMENT:
+        - If forecast indicates extreme weather (Rain > 50mm AND Probability > 80%)
+        - Multiply Z-score by 1.5 ("Pre-emptive Surge Capacity")
+        - Logic: "It is cheaper to overstock now than to face a flood-driven cholera spike later"
+        
+        Parameters:
+            district_id: Target district
+            medicine_id: Target medicine
+            lead_time_days: Days from order to delivery
+            risk_probability: Probability of adverse weather (from forecast)
+            forecast_rainfall: Predicted rainfall amount (mm)
+        
+        Returns:
+            Adjusted safety stock quantity
         """
         # Get historical demand variance
         consumption = self.consumption_df[
@@ -491,16 +602,38 @@ class CausalDemandForecaster:
         ]['consumption']
         
         if len(consumption) < 7:
-            return 100  # Minimum safety stock
+            base_safety_stock = 100  # Minimum safety stock
+        else:
+            daily_std = consumption.std()
+            # Base Safety Stock Formula
+            base_safety_stock = self.SERVICE_LEVEL_Z * daily_std * np.sqrt(lead_time_days)
         
-        daily_std = consumption.std()
+        # =====================================================================
+        # BLACK SWAN ADJUSTMENT: Pre-emptive Surge Capacity
+        # =====================================================================
+        # If we forecast a high-probability extreme weather event,
+        # increase safety stock to prepare for disease surge
         
-        # Safety Stock Formula
-        safety_stock = self.SERVICE_LEVEL_Z * daily_std * np.sqrt(lead_time_days)
+        z_multiplier = 1.0  # Default: No adjustment
         
-        return int(max(safety_stock, 50))  # Minimum 50 units
+        if forecast_rainfall > 50 and risk_probability > 0.8:
+            # HIGH PROBABILITY BLACK SWAN: Extreme flooding expected
+            # This could trigger cholera, diarrhea, vector-borne disease spikes
+            z_multiplier = 1.5
+            print(f"⚠️ BLACK SWAN ALERT for {district_id}: Increasing safety stock by 50%")
+        elif forecast_rainfall > 30 and risk_probability > 0.6:
+            # MODERATE RISK: Significant but not extreme
+            z_multiplier = 1.25
+        elif forecast_rainfall > 10 and risk_probability > 0.5:
+            # MILD RISK: Precautionary buffer
+            z_multiplier = 1.1
+        
+        # Apply multiplier
+        adjusted_safety_stock = base_safety_stock * z_multiplier
+        
+        return int(max(adjusted_safety_stock, 50))  # Minimum 50 units
     
-    def get_stock_status(self, district_id: str) -> List[Dict]:
+    async def get_stock_status(self, district_id: str) -> List[Dict]:
         """Get stock with safety stock calculations"""
         district_stock = self.stock_df[self.stock_df['district_id'] == district_id]
         
@@ -509,12 +642,12 @@ class CausalDemandForecaster:
             medicine = self.medicines.get(row['medicine_id'], {})
             
             # Get 14-day demand forecast
-            demand_forecast = self.forecast_medicine_demand(district_id, row['medicine_id'], 14)
+            demand_forecast = await self.forecast_medicine_demand(district_id, row['medicine_id'], 14)
             total_14d_demand = sum(f['predicted_demand'] for f in demand_forecast)
             total_uncertainty = sum(f['uncertainty'] for f in demand_forecast)
             
             # Calculate proper safety stock
-            safety_stock = self.calculate_safety_stock(district_id, row['medicine_id'])
+            safety_stock = await self.calculate_safety_stock(district_id, row['medicine_id'])
             
             current_stock = row['quantity']
             
@@ -559,7 +692,7 @@ class CausalDemandForecaster:
         
         return results
     
-    def optimize_network_transfers(self) -> List[Dict]:
+    async def optimize_network_transfers(self) -> List[Dict]:
         """
         NETWORK OPTIMIZATION: Consider transfers before orders
         
@@ -576,7 +709,7 @@ class CausalDemandForecaster:
             deficits = []
             
             for district_id in self.districts.keys():
-                stock_status = self.get_stock_status(district_id)
+                stock_status = await self.get_stock_status(district_id)
                 med_status = next((s for s in stock_status if s['medicine_id'] == med_id), None)
                 
                 if not med_status:
@@ -647,9 +780,9 @@ class CausalDemandForecaster:
     
     async def get_recommendations(self, district_id: str) -> List[Dict]:
         """Generate recommendations using network-aware logic"""
-        stock_status = self.get_stock_status(district_id)
+        stock_status = await self.get_stock_status(district_id)
         risk = await self.calculate_risk_score(district_id)
-        network_plan = self.optimize_network_transfers()
+        network_plan = await self.optimize_network_transfers()
         
         recommendations = []
         

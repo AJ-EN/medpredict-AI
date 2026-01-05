@@ -24,7 +24,7 @@ async def get_state_stock_overview():
     total_good = 0
     
     for district_id in forecaster.districts.keys():
-        stock_status = forecaster.get_stock_status(district_id)
+        stock_status = await forecaster.get_stock_status(district_id)
         
         critical_count = len([s for s in stock_status if s['status'] == 'critical'])
         warning_count = len([s for s in stock_status if s['status'] == 'warning'])
@@ -74,7 +74,7 @@ async def get_district_stock(district_id: str):
     if district_id not in forecaster.districts:
         raise HTTPException(status_code=404, detail=f"District {district_id} not found")
     
-    stock_status = forecaster.get_stock_status(district_id)
+    stock_status = await forecaster.get_stock_status(district_id)
     
     # Sort by status (critical first)
     status_order = {'critical': 0, 'warning': 1, 'good': 2}
@@ -101,7 +101,7 @@ async def get_all_stock_gaps():
     gaps = []
     
     for district_id in forecaster.districts.keys():
-        stock_status = forecaster.get_stock_status(district_id)
+        stock_status = await forecaster.get_stock_status(district_id)
         
         for stock in stock_status:
             if stock['stock_gap'] < 0:  # Deficit

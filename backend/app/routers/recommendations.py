@@ -18,7 +18,7 @@ async def get_network_optimization():
     """
     forecaster = get_forecaster()
     
-    plan = forecaster.optimize_network_transfers()
+    plan = await forecaster.optimize_network_transfers()
     
     total_transfer_savings = sum(t.get('cost_saved', 0) for t in plan['transfers'])
     
