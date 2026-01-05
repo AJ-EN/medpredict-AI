@@ -74,7 +74,7 @@ async def simulate_scenario(
     total_stockouts_with = 0
     
     for district_id in forecaster.districts.keys():
-        stock_status = forecaster.get_stock_status(district_id)
+        stock_status = await forecaster.get_stock_status(district_id)
         
         for stock in stock_status:
             # Simulated demand with severity multiplier
@@ -140,7 +140,7 @@ async def get_suggested_transfers():
     # Find surplus and deficit districts
     district_status = {}
     for district_id in forecaster.districts.keys():
-        stock_status = forecaster.get_stock_status(district_id)
+        stock_status = await forecaster.get_stock_status(district_id)
         risk = await forecaster.calculate_risk_score(district_id)
         
         district_status[district_id] = {

@@ -87,7 +87,7 @@ async def get_medicine_forecast(
     if medicine_id not in forecaster.medicines:
         raise HTTPException(status_code=404, detail=f"Medicine {medicine_id} not found")
     
-    demand_forecast = forecaster.forecast_medicine_demand(district_id, medicine_id, days_ahead)
+    demand_forecast = await forecaster.forecast_medicine_demand(district_id, medicine_id, days_ahead)
     
     return {
         'district_id': district_id,
@@ -112,7 +112,7 @@ async def get_all_medicine_forecasts(
     
     results = {}
     for medicine_id in forecaster.medicines.keys():
-        demand_forecast = forecaster.forecast_medicine_demand(district_id, medicine_id, days_ahead)
+        demand_forecast = await forecaster.forecast_medicine_demand(district_id, medicine_id, days_ahead)
         results[medicine_id] = {
             'name': forecaster.medicines[medicine_id]['name'],
             'forecast': demand_forecast,
