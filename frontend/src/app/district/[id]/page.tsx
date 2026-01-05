@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
     ArrowLeft,
     TrendingUp,
-    Package,
-    AlertTriangle,
     Thermometer,
     CloudRain,
     Droplets,
-    RefreshCw
+    RefreshCw,
+    Clock,
+    AlertTriangle,
+    CheckCircle2
 } from "lucide-react";
 import {
     LineChart,
@@ -24,31 +25,52 @@ import {
     Area,
     AreaChart
 } from "recharts";
+import { Panel, PanelHeader, PanelBody } from "@/components/ui/Panel";
+import { cn } from "@/lib/utils";
 import {
     getDistrictForecast,
     getDistrictStock,
     getRecommendations,
-    getDistrictSignals,
-    getRiskColor,
-    getRiskEmoji
+    getDistrictSignals
 } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
-export default function DistrictPage() {
+interface StockItem {
+    medicine_id: string;
+    medicine_name: string;
+    stock_percentage: number;
+    current_stock: number;
+    days_until_stockout: number;
+    status: string;
+}
+
+interface Recommendation {
+    priority: string;
+    action: string;
+    reason: string;
+    deadline: string;
+}
+
+export default function DistrictAnalysis() {
     const params = useParams();
     const districtId = params.id as string;
 
-    const [forecast, setForecast] = useState<any>(null);
-    const [stock, setStock] = useState<any>(null);
-    const [recommendations, setRecommendations] = useState<any>(null);
-    const [signals, setSignals] = useState<any>(null);
+    const [forecast, setForecast] = useState<{
+        district_name: string;
+        risk: { level: string; score: number };
+        forecast: Array<{ date: string; predicted: number; upper_bound: number; lower_bound: number; is_causal?: boolean }>;
+    } | null>(null);
+    const [stock, setStock] = useState<{ stock_items: StockItem[] } | null>(null);
+    const [recommendations, setRecommendations] = useState<{ recommendations: Recommendation[] } | null>(null);
+    const [signals, setSignals] = useState<{
+        signals: {
+            weather: { data: { temperature: number; humidity: number; rainfall_lag_14d?: number } };
+        };
+        overall_risk: { score: number };
+    } | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadData();
-    }, [districtId]);
-
-    async function loadData() {
-        setLoading(true);
+    const loadData = useCallback(async () => {
         try {
             const [fc, st, rec, sig] = await Promise.all([
                 getDistrictForecast(districtId, 'dengue', 14),
@@ -62,14 +84,19 @@ export default function DistrictPage() {
             setSignals(sig);
         } catch (error) {
             console.error("Error loading data:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }
+    }, [districtId]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     if (loading) {
         return (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "50vh" }}>
-                <RefreshCw className="animate-spin" size={32} />
+            <div className="min-h-screen flex items-center justify-center">
+                <RefreshCw className="animate-spin text-accent" size={24} />
             </div>
         );
     }
@@ -78,218 +105,308 @@ export default function DistrictPage() {
     const riskScore = forecast?.risk?.score || 0;
 
     return (
-        <div>
-            {/* Header */}
-            <div style={{ marginBottom: 32 }}>
-                <Link href="/" style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    color: "var(--muted)",
-                    textDecoration: "none",
-                    marginBottom: 16
-                }}>
-                    <ArrowLeft size={16} />
-                    Back to Overview
-                </Link>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                        <h1 style={{ fontSize: 28, fontWeight: 700 }}>
-                            {forecast?.district_name || districtId}
-                        </h1>
-                        <span className={`badge badge-${riskLevel}`} style={{ fontSize: 14 }}>
-                            {getRiskEmoji(riskLevel)} Risk: {riskLevel.toUpperCase()}
-                        </span>
+        <div className="min-h-screen bg-[var(--bg-base)]">
+            {/* Page Header */}
+            <header className="page-header">
+                <div className="page-title">
+                    <Link href="/" className="text-muted hover:text-primary transition-colors">
+                        <ArrowLeft size={18} />
+                    </Link>
+                    <span>{forecast?.district_name || districtId}</span>
+                    <RiskBadge level={riskLevel} />
+                </div>
+                <div className="page-meta">
+                    <div className="flex items-center gap-2">
+                        <Clock size={14} />
+                        <span>{new Date().toLocaleTimeString()}</span>
                     </div>
-                    <button onClick={loadData} className="btn btn-ghost">
-                        <RefreshCw size={16} />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setLoading(true); loadData(); }}
+                        className="text-secondary hover:text-primary"
+                    >
+                        <RefreshCw size={14} className="mr-2" />
                         Refresh
-                    </button>
+                    </Button>
                 </div>
-            </div>
+            </header>
 
-            {/* Risk Signal Cards */}
-            <div className="bento-grid bento-grid-4" style={{ marginBottom: 24 }}>
-                <div className="card">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                        <Thermometer size={18} color="var(--warning)" />
-                        <span style={{ color: "var(--muted)", fontSize: 13 }}>Temperature</span>
-                    </div>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>
-                        {signals?.signals?.weather?.data?.temperature?.toFixed(1) || '--'}°C
-                    </div>
+            <div className="p-6 space-y-6">
+                {/* Signal Indicators — Compact row */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                    <SignalCard
+                        icon={<Thermometer size={16} />}
+                        label="Temperature"
+                        value={signals?.signals?.weather?.data?.temperature?.toFixed(1) || '--'}
+                        unit="°C"
+                    />
+                    <SignalCard
+                        icon={<CloudRain size={16} />}
+                        label="Rainfall (14d lag)"
+                        value={signals?.signals?.weather?.data?.rainfall_lag_14d?.toFixed(0) || '--'}
+                        unit="mm"
+                        highlight
+                    />
+                    <SignalCard
+                        icon={<Droplets size={16} />}
+                        label="Humidity"
+                        value={signals?.signals?.weather?.data?.humidity?.toFixed(0) || '--'}
+                        unit="%"
+                    />
+                    <SignalCard
+                        icon={<TrendingUp size={16} />}
+                        label="Risk Score"
+                        value={(riskScore * 100).toFixed(0)}
+                        unit="%"
+                        status={riskLevel as 'red' | 'orange' | 'yellow' | 'green'}
+                    />
                 </div>
-                <div className="card">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                        <CloudRain size={18} color="var(--accent)" />
-                        <span style={{ color: "var(--muted)", fontSize: 13 }}>Rainfall (14d)</span>
-                    </div>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>
-                        {signals?.signals?.weather?.data?.rainfall_14d?.toFixed(0) || '--'}mm
-                    </div>
-                </div>
-                <div className="card">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                        <Droplets size={18} color="var(--success)" />
-                        <span style={{ color: "var(--muted)", fontSize: 13 }}>Humidity</span>
-                    </div>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>
-                        {signals?.signals?.weather?.data?.humidity?.toFixed(0) || '--'}%
-                    </div>
-                </div>
-                <div className="card">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                        <TrendingUp size={18} color={getRiskColor(riskLevel)} />
-                        <span style={{ color: "var(--muted)", fontSize: 13 }}>Risk Score</span>
-                    </div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: getRiskColor(riskLevel) }}>
-                        {(riskScore * 100).toFixed(0)}%
-                    </div>
-                </div>
-            </div>
 
-            {/* Forecast Chart */}
-            <div className="card" style={{ marginBottom: 24 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>
-                    📈 Dengue Case Forecast (14 Days)
-                </h2>
-                <div style={{ height: 300 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={forecast?.forecast || []}>
-                            <defs>
-                                <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                            <XAxis
-                                dataKey="date"
-                                tick={{ fill: 'var(--muted)', fontSize: 12 }}
-                                tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            />
-                            <YAxis tick={{ fill: 'var(--muted)', fontSize: 12 }} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: 'var(--card)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 8
-                                }}
-                                labelFormatter={(val) => new Date(val).toLocaleDateString()}
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="upper_bound"
-                                stroke="transparent"
-                                fill="#3b82f6"
-                                fillOpacity={0.1}
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="lower_bound"
-                                stroke="transparent"
-                                fill="#0a0a0f"
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="predicted"
-                                stroke="#3b82f6"
-                                strokeWidth={3}
-                                dot={false}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
-                <div style={{ display: "flex", gap: 24, marginTop: 16, justifyContent: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 24, height: 3, background: "#3b82f6", borderRadius: 2 }} />
-                        <span style={{ fontSize: 12, color: "var(--muted)" }}>Predicted Cases</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 24, height: 12, background: "rgba(59,130,246,0.2)", borderRadius: 2 }} />
-                        <span style={{ fontSize: 12, color: "var(--muted)" }}>95% Confidence Interval</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="bento-grid bento-grid-2">
-                {/* Stock Status */}
-                <div className="card">
-                    <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>
-                        📦 Stock Status
-                    </h2>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                        {stock?.stock_items?.map((item: any) => (
-                            <div key={item.medicine_id}>
-                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                                    <span style={{ fontWeight: 500 }}>{item.medicine_name}</span>
-                                    <span style={{
-                                        color: item.status === 'critical' ? 'var(--danger)' :
-                                            item.status === 'warning' ? 'var(--warning)' : 'var(--success)'
-                                    }}>
-                                        {item.stock_percentage}%
-                                    </span>
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Forecast Chart — THE HERO */}
+                    <Panel className="lg:col-span-2">
+                        <PanelHeader
+                            actions={
+                                <span className="text-sm text-muted">
+                                    Causal Model • 14-day forecast
+                                </span>
+                            }
+                        >
+                            Case Projection
+                        </PanelHeader>
+                        <PanelBody>
+                            <div className="h-[320px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={forecast?.forecast || []}>
+                                        <defs>
+                                            <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                                            tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                            stroke="var(--border)"
+                                        />
+                                        <YAxis
+                                            tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                                            stroke="var(--border)"
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                background: 'var(--bg-elevated)',
+                                                border: '1px solid var(--border)',
+                                                borderRadius: 6,
+                                                fontSize: 13
+                                            }}
+                                            labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="upper_bound"
+                                            stroke="transparent"
+                                            fill="var(--accent)"
+                                            fillOpacity={0.1}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="lower_bound"
+                                            stroke="transparent"
+                                            fill="var(--bg-base)"
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="predicted"
+                                            stroke="var(--accent)"
+                                            strokeWidth={2}
+                                            dot={false}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="flex gap-6 mt-4 justify-center text-xs text-muted">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-0.5 bg-[var(--accent)] rounded" />
+                                    <span>Predicted Cases</span>
                                 </div>
-                                <div className="progress-bar">
-                                    <div
-                                        className={`progress-fill progress-${item.status === 'critical' ? 'critical' : item.status === 'warning' ? 'warning' : 'good'}`}
-                                        style={{ width: `${Math.min(item.stock_percentage, 100)}%` }}
-                                    />
-                                </div>
-                                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                                    {item.current_stock.toLocaleString()} units • {item.days_until_stockout} days until stockout
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-3 bg-[var(--accent)] opacity-20 rounded" />
+                                    <span>95% Confidence</span>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                        </PanelBody>
+                    </Panel>
+
+                    {/* Stock Status */}
+                    <Panel>
+                        <PanelHeader>Stock Readiness</PanelHeader>
+                        <PanelBody className="space-y-4">
+                            {stock?.stock_items?.map((item) => (
+                                <div key={item.medicine_id}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-medium truncate flex-1">{item.medicine_name}</span>
+                                        <span className={cn(
+                                            "text-sm font-mono ml-2",
+                                            item.status === 'critical' ? 'text-critical' :
+                                                item.status === 'warning' ? 'text-warning' :
+                                                    'text-success'
+                                        )}>
+                                            {item.stock_percentage}%
+                                        </span>
+                                    </div>
+                                    <div className="h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                                        <div
+                                            className={cn(
+                                                "h-full transition-all duration-500 rounded-full",
+                                                item.status === 'critical' ? 'bg-[var(--status-critical)]' :
+                                                    item.status === 'warning' ? 'bg-[var(--status-warning)]' :
+                                                        'bg-[var(--status-success)]'
+                                            )}
+                                            style={{ width: `${Math.min(item.stock_percentage, 100)}%` }}
+                                        />
+                                    </div>
+                                    <div className="text-xs text-muted mt-1">
+                                        {item.current_stock.toLocaleString()} units • {item.days_until_stockout}d runway
+                                    </div>
+                                </div>
+                            ))}
+                        </PanelBody>
+                    </Panel>
                 </div>
 
-                {/* Recommendations */}
-                <div className="card">
-                    <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>
-                        📋 Recommended Actions
-                    </h2>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {recommendations?.recommendations?.map((rec: any, i: number) => (
-                            <div
-                                key={i}
-                                style={{
-                                    padding: 16,
-                                    borderRadius: 8,
-                                    background: rec.priority === 'urgent' ? 'var(--danger-bg)' :
-                                        rec.priority === 'high' ? 'var(--warning-bg)' : 'var(--card)',
-                                    border: `1px solid ${rec.priority === 'urgent' ? 'rgba(239,68,68,0.3)' :
-                                        rec.priority === 'high' ? 'rgba(245,158,11,0.3)' : 'var(--border)'}`
-                                }}
-                            >
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                                    {rec.priority === 'urgent' && <AlertTriangle size={16} color="var(--danger)" />}
-                                    <span style={{
-                                        fontSize: 11,
-                                        textTransform: "uppercase",
-                                        fontWeight: 600,
-                                        color: rec.priority === 'urgent' ? 'var(--danger)' : 'var(--warning)'
-                                    }}>
-                                        {rec.priority}
-                                    </span>
-                                </div>
-                                <div style={{ fontWeight: 500, marginBottom: 4 }}>{rec.action}</div>
-                                <div style={{ fontSize: 13, color: "var(--muted)" }}>{rec.reason}</div>
-                                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
-                                    Deadline: {new Date(rec.deadline).toLocaleDateString()}
-                                </div>
+                {/* Recommendations — Only show if there are urgent items */}
+                {recommendations?.recommendations && recommendations.recommendations.length > 0 && (
+                    <Panel>
+                        <PanelHeader>Recommended Actions</PanelHeader>
+                        <PanelBody noPadding>
+                            <div className="divide-y divide-[var(--border-muted)]">
+                                {recommendations.recommendations.map((rec, i) => (
+                                    <div key={i} className="flex items-start gap-4 p-5">
+                                        <div className={cn(
+                                            "w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0",
+                                            rec.priority === 'urgent' ? 'bg-[var(--status-critical-muted)]' :
+                                                rec.priority === 'high' ? 'bg-[var(--status-warning-muted)]' :
+                                                    'bg-[var(--bg-elevated)]'
+                                        )}>
+                                            {rec.priority === 'urgent' ? (
+                                                <AlertTriangle size={16} className="text-critical" />
+                                            ) : (
+                                                <CheckCircle2 size={16} className="text-muted" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className={cn(
+                                                    "text-xs font-medium uppercase px-2 py-0.5 rounded",
+                                                    rec.priority === 'urgent' ? 'bg-[var(--status-critical-muted)] text-critical' :
+                                                        rec.priority === 'high' ? 'bg-[var(--status-warning-muted)] text-warning' :
+                                                            'bg-[var(--bg-elevated)] text-muted'
+                                                )}>
+                                                    {rec.priority}
+                                                </span>
+                                            </div>
+                                            <p className="font-medium">{rec.action}</p>
+                                            <p className="text-sm text-secondary mt-1">{rec.reason}</p>
+                                        </div>
+                                        <div className="text-xs text-muted font-mono">
+                                            {new Date(rec.deadline).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
+                        </PanelBody>
+                    </Panel>
+                )}
 
-                        {(!recommendations?.recommendations || recommendations.recommendations.length === 0) && (
-                            <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
-                                No urgent recommendations
-                            </div>
-                        )}
-                    </div>
-                </div>
+                {/* Empty state for recommendations */}
+                {(!recommendations?.recommendations || recommendations.recommendations.length === 0) && (
+                    <Panel>
+                        <PanelBody className="text-center py-12">
+                            <CheckCircle2 size={32} className="mx-auto mb-3 text-success opacity-60" />
+                            <p className="text-secondary">No urgent actions required</p>
+                            <p className="text-sm text-muted mt-1">All metrics within normal parameters</p>
+                        </PanelBody>
+                    </Panel>
+                )}
             </div>
         </div>
+    );
+}
+
+/* ===== COMPONENTS ===== */
+
+function SignalCard({
+    icon,
+    label,
+    value,
+    unit,
+    highlight,
+    status
+}: {
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+    unit: string;
+    highlight?: boolean;
+    status?: 'red' | 'orange' | 'yellow' | 'green';
+}) {
+    const statusColors = {
+        red: 'text-critical',
+        orange: 'text-warning',
+        yellow: 'text-warning',
+        green: 'text-success'
+    };
+
+    return (
+        <div className={cn(
+            "metric-card",
+            highlight && "border-[var(--accent)] border-opacity-50"
+        )}>
+            <div className="flex items-center gap-2 mb-2">
+                <span className="text-muted">{icon}</span>
+                <span className="text-xs text-muted uppercase tracking-wide">{label}</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+                <span className={cn(
+                    "text-2xl font-semibold font-mono",
+                    status ? statusColors[status] : 'text-primary'
+                )}>
+                    {value}
+                </span>
+                <span className="text-sm text-muted">{unit}</span>
+            </div>
+            {highlight && (
+                <div className="text-xs text-accent mt-1">Causal indicator</div>
+            )}
+        </div>
+    );
+}
+
+function RiskBadge({ level }: { level: string }) {
+    const config = {
+        red: { label: 'Critical', class: 'risk-red' },
+        orange: { label: 'Elevated', class: 'risk-orange' },
+        yellow: { label: 'Watch', class: 'risk-yellow' },
+        green: { label: 'Normal', class: 'risk-green' }
+    };
+
+    const { label, class: className } = config[level as keyof typeof config] || config.green;
+
+    return (
+        <span className={cn("risk-badge", className)}>
+            <span className={cn(
+                "status-dot",
+                level === 'red' ? 'status-critical' :
+                    level === 'orange' ? 'status-warning' :
+                        level === 'yellow' ? 'status-warning' :
+                            'status-success'
+            )} />
+            {label}
+        </span>
     );
 }

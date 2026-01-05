@@ -1,249 +1,286 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-    PlayCircle,
+    Zap,
     AlertTriangle,
-    TrendingDown,
     Clock,
     Heart,
-    Zap
+    RefreshCw
 } from "lucide-react";
+import { Panel, PanelHeader, PanelBody } from "@/components/ui/Panel";
+import { Slider } from "@/components/ui/slider";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { simulateScenario } from "@/lib/api";
 
-export default function SimulatorPage() {
+interface SimulationResults {
+    results: {
+        without_system: {
+            stockout_events: number;
+            response_time_days: number;
+            estimated_cost: number;
+        };
+        with_system: {
+            stockout_events: number;
+            response_time_days: number;
+            estimated_cost: number;
+        };
+        impact: {
+            stockouts_prevented: number;
+            response_time_saved_days: number;
+            estimated_lives_impacted: number;
+            cost_savings: number;
+        };
+    };
+}
+
+export default function ScenarioEngine() {
     const [severity, setSeverity] = useState(2);
     const [responseDays, setResponseDays] = useState(7);
-    const [results, setResults] = useState<any>(null);
+    const [results, setResults] = useState<SimulationResults | null>(null);
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        runSimulation();
-    }, []);
-
-    async function runSimulation() {
-        setLoading(true);
+    const runSimulation = useCallback(async () => {
         try {
             const data = await simulateScenario(severity, responseDays);
             setResults(data);
         } catch (error) {
             console.error("Error running simulation:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }
+    }, [severity, responseDays]);
+
+    const handleRun = () => {
+        setLoading(true);
+        runSimulation();
+    };
+
+    useEffect(() => {
+        // Initial run - loading defaults to false here? 
+        // Logic: The page starts with loading=false. But we want to run initially?
+        // Actually earlier loading=false.
+        // Let's set loading=true on mount if we want to show it.
+        // But the previous code just ran it.
+        runSimulation();
+    }, [runSimulation]);
 
     const presetScenarios = [
-        { label: "Monsoon Delay", severity: 1.5, response: 10 },
-        { label: "Double Intensity", severity: 3, response: 7 },
-        { label: "Multi-District", severity: 5, response: 5 },
+        { label: "Monsoon Delay", severity: 1.5, response: 10, description: "Late onset, prolonged risk period" },
+        { label: "Double Intensity", severity: 3, response: 7, description: "2x normal outbreak scale" },
+        { label: "Multi-District", severity: 5, response: 5, description: "Simultaneous regional surge" },
     ];
 
+    const getSeverityLabel = (val: number) => {
+        if (val <= 1.5) return { text: 'Mild', class: 'text-success' };
+        if (val <= 3) return { text: 'Moderate', class: 'text-warning' };
+        if (val <= 5) return { text: 'Severe', class: 'text-warning' };
+        return { text: 'Extreme', class: 'text-critical' };
+    };
+
+    const severityInfo = getSeverityLabel(severity);
+
     return (
-        <div>
-            {/* Header */}
-            <div style={{ marginBottom: 32 }}>
-                <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>
-                    🎮 Scenario Simulator
-                </h1>
-                <p style={{ color: "var(--muted)" }}>
-                    Model outbreak scenarios and evaluate system effectiveness
-                </p>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "400px 1fr", gap: 24 }}>
-                {/* Controls */}
-                <div className="card">
-                    <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 24 }}>
-                        ⚙️ Simulation Parameters
-                    </h2>
-
-                    {/* Severity Slider */}
-                    <div style={{ marginBottom: 32 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                            <label style={{ fontWeight: 500 }}>Outbreak Severity</label>
-                            <span style={{
-                                color: severity > 5 ? "var(--danger)" : severity > 2 ? "var(--warning)" : "var(--success)",
-                                fontWeight: 600
-                            }}>
-                                {severity}x baseline
-                            </span>
-                        </div>
-                        <input
-                            type="range"
-                            min="1"
-                            max="10"
-                            step="0.5"
-                            value={severity}
-                            onChange={(e) => setSeverity(parseFloat(e.target.value))}
-                            style={{ width: "100%" }}
-                        />
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
-                            <span>1x (Normal)</span>
-                            <span>10x (Severe)</span>
-                        </div>
-                    </div>
-
-                    {/* Response Time Slider */}
-                    <div style={{ marginBottom: 32 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                            <label style={{ fontWeight: 500 }}>Response Lead Time</label>
-                            <span style={{
-                                color: responseDays < 5 ? "var(--success)" : responseDays < 10 ? "var(--warning)" : "var(--danger)",
-                                fontWeight: 600
-                            }}>
-                                {responseDays} days
-                            </span>
-                        </div>
-                        <input
-                            type="range"
-                            min="0"
-                            max="21"
-                            step="1"
-                            value={responseDays}
-                            onChange={(e) => setResponseDays(parseInt(e.target.value))}
-                            style={{ width: "100%" }}
-                        />
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
-                            <span>0 days (Instant)</span>
-                            <span>21 days (Traditional)</span>
-                        </div>
-                    </div>
-
-                    {/* Preset Scenarios */}
-                    <div style={{ marginBottom: 24 }}>
-                        <label style={{ fontWeight: 500, display: "block", marginBottom: 12 }}>
-                            Pre-set Scenarios
-                        </label>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            {presetScenarios.map((scenario) => (
-                                <button
-                                    key={scenario.label}
-                                    onClick={() => {
-                                        setSeverity(scenario.severity);
-                                        setResponseDays(scenario.response);
-                                    }}
-                                    className="btn btn-ghost"
-                                    style={{ justifyContent: "flex-start" }}
-                                >
-                                    {scenario.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Run Button */}
+        <div className="min-h-screen bg-[var(--bg-base)]">
+            {/* Page Header */}
+            <header className="page-header">
+                <div className="page-title">
+                    <span>Scenario Engine</span>
+                    <span className="text-sm font-normal text-muted ml-2">What-if Analysis</span>
+                </div>
+                <div className="page-meta">
                     <button
                         onClick={runSimulation}
-                        className="btn btn-primary"
-                        style={{ width: "100%" }}
                         disabled={loading}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-[var(--bg-elevated)] rounded-md transition-colors"
                     >
-                        <PlayCircle size={18} />
-                        {loading ? "Simulating..." : "Run Simulation"}
+                        <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+                        Recalculate
                     </button>
                 </div>
+            </header>
 
-                {/* Results */}
-                <div className="card">
-                    <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 24 }}>
-                        📊 Simulation Results
-                    </h2>
-
-                    {results && (
-                        <div>
-                            {/* Impact Cards */}
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 32 }}>
-                                <ImpactCard
-                                    icon={<AlertTriangle />}
-                                    label="Stockouts Prevented"
-                                    value={results.results?.impact?.stockouts_prevented || 0}
-                                    color="var(--success)"
+            <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Controls */}
+                    <Panel>
+                        <PanelHeader>Simulation Parameters</PanelHeader>
+                        <PanelBody className="space-y-8">
+                            {/* Severity Slider */}
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <label className="text-sm font-medium text-secondary">Outbreak Severity</label>
+                                    <span className={cn("text-xl font-mono font-semibold", severityInfo.class)}>
+                                        {severity}x
+                                    </span>
+                                </div>
+                                <Slider
+                                    value={[severity]}
+                                    onValueChange={(vals) => setSeverity(vals[0])}
+                                    min={1}
+                                    max={10}
+                                    step={0.5}
+                                    className="w-full"
                                 />
-                                <ImpactCard
-                                    icon={<Clock />}
-                                    label="Days Saved"
-                                    value={results.results?.impact?.response_time_saved_days || 0}
-                                    color="var(--accent)"
-                                />
-                                <ImpactCard
-                                    icon={<Heart />}
-                                    label="Lives Impacted"
-                                    value={results.results?.impact?.estimated_lives_impacted || 0}
-                                    color="var(--danger)"
-                                />
+                                <div className="flex justify-between text-xs text-muted mt-2">
+                                    <span>1× Baseline</span>
+                                    <span className={severityInfo.class}>{severityInfo.text}</span>
+                                    <span>10× Pandemic</span>
+                                </div>
                             </div>
 
-                            {/* Comparison */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-                                {/* Without System */}
-                                <div style={{
-                                    padding: 24,
-                                    background: "rgba(239,68,68,0.1)",
-                                    borderRadius: 12,
-                                    border: "1px solid rgba(239,68,68,0.2)"
-                                }}>
-                                    <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: "var(--danger)" }}>
-                                        ❌ Without MedPredict
-                                    </h3>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                            <span style={{ color: "var(--muted)" }}>Stockout Events</span>
-                                            <span style={{ fontWeight: 600 }}>{results.results?.without_system?.stockout_events}</span>
+                            {/* Response Time Slider */}
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <label className="text-sm font-medium text-secondary">Response Lead Time</label>
+                                    <span className={cn(
+                                        "text-xl font-mono font-semibold",
+                                        responseDays <= 5 ? 'text-success' :
+                                            responseDays <= 10 ? 'text-warning' :
+                                                'text-critical'
+                                    )}>
+                                        {responseDays} days
+                                    </span>
+                                </div>
+                                <Slider
+                                    value={[responseDays]}
+                                    onValueChange={(vals) => setResponseDays(vals[0])}
+                                    min={0}
+                                    max={21}
+                                    step={1}
+                                    className="w-full"
+                                />
+                                <div className="flex justify-between text-xs text-muted mt-2">
+                                    <span>0d Instant</span>
+                                    <span>21d Traditional</span>
+                                </div>
+                            </div>
+
+                            {/* Presets */}
+                            <div>
+                                <label className="text-sm font-medium text-secondary block mb-3">Preset Scenarios</label>
+                                <div className="space-y-2">
+                                    {presetScenarios.map((scenario) => (
+                                        <button
+                                            key={scenario.label}
+                                            onClick={() => {
+                                                setSeverity(scenario.severity);
+                                                setResponseDays(scenario.response);
+                                            }}
+                                            className="w-full p-4 text-left rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-surface)] hover:border-[var(--accent)] transition-colors"
+                                        >
+                                            <div className="font-medium">{scenario.label}</div>
+                                            <div className="text-sm text-muted mt-1">{scenario.description}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Run Button */}
+                            <Button
+                                onClick={handleRun}
+                                disabled={loading}
+                                className="w-full"
+                                size="lg"
+                            >
+                                <Zap size={18} className="mr-2" />
+                                {loading ? "Simulating..." : "Run Simulation"}
+                            </Button>
+                        </PanelBody>
+                    </Panel>
+
+                    {/* Results — THE HERO */}
+                    <Panel className="lg:col-span-2">
+                        <PanelHeader>Simulation Results</PanelHeader>
+                        <PanelBody>
+                            {results && (
+                                <div className="space-y-8">
+                                    {/* Impact Metrics — Primary Focus */}
+                                    <div className="grid grid-cols-3 gap-6">
+                                        <ImpactCard
+                                            icon={<AlertTriangle size={20} />}
+                                            label="Stockouts Prevented"
+                                            value={results.results?.impact?.stockouts_prevented || 0}
+                                            color="success"
+                                        />
+                                        <ImpactCard
+                                            icon={<Clock size={20} />}
+                                            label="Days Saved"
+                                            value={results.results?.impact?.response_time_saved_days || 0}
+                                            color="accent"
+                                        />
+                                        <ImpactCard
+                                            icon={<Heart size={20} />}
+                                            label="Lives Impacted"
+                                            value={results.results?.impact?.estimated_lives_impacted || 0}
+                                            color="critical"
+                                        />
+                                    </div>
+
+                                    {/* Comparison */}
+                                    <div className="grid grid-cols-2 gap-6">
+                                        {/* Without System */}
+                                        <div className="p-6 rounded-lg border border-[var(--status-critical)] bg-[var(--bg-elevated)]">
+                                            <div className="flex items-center gap-2 mb-5">
+                                                <span className="status-dot status-critical" />
+                                                <span className="font-medium">Without MedPredict</span>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <StatRow
+                                                    label="Stockout Events"
+                                                    value={results.results?.without_system?.stockout_events}
+                                                />
+                                                <StatRow
+                                                    label="Response Time"
+                                                    value={`${results.results?.without_system?.response_time_days} days`}
+                                                />
+                                                <StatRow
+                                                    label="Emergency Cost"
+                                                    value={`₹${((results.results?.without_system?.estimated_cost || 0) / 100000).toFixed(1)}L`}
+                                                />
+                                            </div>
                                         </div>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                            <span style={{ color: "var(--muted)" }}>Response Time</span>
-                                            <span style={{ fontWeight: 600 }}>{results.results?.without_system?.response_time_days} days</span>
+
+                                        {/* With System */}
+                                        <div className="p-6 rounded-lg border border-[var(--status-success)] bg-[var(--bg-elevated)]">
+                                            <div className="flex items-center gap-2 mb-5">
+                                                <span className="status-dot status-success" />
+                                                <span className="font-medium">With MedPredict</span>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <StatRow
+                                                    label="Stockout Events"
+                                                    value={results.results?.with_system?.stockout_events}
+                                                />
+                                                <StatRow
+                                                    label="Response Time"
+                                                    value={`${results.results?.with_system?.response_time_days} days`}
+                                                />
+                                                <StatRow
+                                                    label="Planned Cost"
+                                                    value={`₹${((results.results?.with_system?.estimated_cost || 0) / 100000).toFixed(1)}L`}
+                                                />
+                                            </div>
                                         </div>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                            <span style={{ color: "var(--muted)" }}>Emergency Cost</span>
-                                            <span style={{ fontWeight: 600 }}>₹{(results.results?.without_system?.estimated_cost / 100000).toFixed(1)}L</span>
+                                    </div>
+
+                                    {/* Total Savings */}
+                                    <div className="p-8 rounded-lg border border-[var(--accent)] bg-[var(--accent-muted)] text-center">
+                                        <div className="text-sm text-muted uppercase tracking-wide mb-2">
+                                            Total Cost Savings
+                                        </div>
+                                        <div className="text-4xl font-bold font-mono text-accent">
+                                            ₹{((results.results?.impact?.cost_savings || 0) / 100000).toFixed(1)} Lakhs
+                                        </div>
+                                        <div className="text-sm text-secondary mt-3">
+                                            Through proactive pre-positioning and network optimization
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* With System */}
-                                <div style={{
-                                    padding: 24,
-                                    background: "rgba(34,197,94,0.1)",
-                                    borderRadius: 12,
-                                    border: "1px solid rgba(34,197,94,0.2)"
-                                }}>
-                                    <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: "var(--success)" }}>
-                                        ✅ With MedPredict
-                                    </h3>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                            <span style={{ color: "var(--muted)" }}>Stockout Events</span>
-                                            <span style={{ fontWeight: 600 }}>{results.results?.with_system?.stockout_events}</span>
-                                        </div>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                            <span style={{ color: "var(--muted)" }}>Response Time</span>
-                                            <span style={{ fontWeight: 600 }}>{results.results?.with_system?.response_time_days} days</span>
-                                        </div>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                            <span style={{ color: "var(--muted)" }}>Planned Cost</span>
-                                            <span style={{ fontWeight: 600 }}>₹{(results.results?.with_system?.estimated_cost / 100000).toFixed(1)}L</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Cost Savings */}
-                            <div style={{
-                                marginTop: 24,
-                                padding: 20,
-                                background: "linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(139,92,246,0.1) 100%)",
-                                borderRadius: 12,
-                                border: "1px solid rgba(59,130,246,0.2)",
-                                textAlign: "center"
-                            }}>
-                                <div style={{ fontSize: 14, color: "var(--muted)", marginBottom: 8 }}>Total Cost Savings</div>
-                                <div style={{ fontSize: 36, fontWeight: 700, color: "var(--success)" }}>
-                                    ₹{((results.results?.impact?.cost_savings || 0) / 100000).toFixed(1)} Lakhs
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                            )}
+                        </PanelBody>
+                    </Panel>
                 </div>
             </div>
         </div>
@@ -259,19 +296,32 @@ function ImpactCard({
     icon: React.ReactNode;
     label: string;
     value: number;
-    color: string;
+    color: 'success' | 'accent' | 'critical';
 }) {
+    const colorClasses = {
+        success: 'text-success',
+        accent: 'text-accent',
+        critical: 'text-critical'
+    };
+
     return (
-        <div style={{
-            padding: 20,
-            background: `${color}15`,
-            borderRadius: 12,
-            border: `1px solid ${color}30`,
-            textAlign: "center"
-        }}>
-            <div style={{ color, marginBottom: 8 }}>{icon}</div>
-            <div style={{ fontSize: 32, fontWeight: 700, color }}>{value}</div>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{label}</div>
+        <div className="p-6 bg-[var(--bg-elevated)] rounded-lg text-center">
+            <div className={cn("mb-3 flex justify-center", colorClasses[color])}>
+                {icon}
+            </div>
+            <div className={cn("text-3xl font-bold font-mono", colorClasses[color])}>
+                {value}
+            </div>
+            <div className="text-xs text-muted uppercase tracking-wide mt-2">{label}</div>
+        </div>
+    );
+}
+
+function StatRow({ label, value }: { label: string; value: string | number }) {
+    return (
+        <div className="flex justify-between items-center">
+            <span className="text-sm text-secondary">{label}</span>
+            <span className="font-mono font-medium">{value}</span>
         </div>
     );
 }

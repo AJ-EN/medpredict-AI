@@ -1,22 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   TrendingUp,
-  Package,
+  Package2,
   Activity,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from "lucide-react";
+import { Panel, PanelHeader, PanelBody } from "@/components/ui/Panel";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   getStateForecast,
   getAlerts,
   getStateStock,
-  getRiskColor,
-  getRiskEmoji
 } from "@/lib/api";
+
 
 interface DistrictData {
   district_name: string;
@@ -26,19 +29,23 @@ interface DistrictData {
   peak_day: string;
 }
 
-export default function HomePage() {
+interface AlertData {
+  id: string;
+  district_name: string;
+  level: string;
+  title: string;
+  message: string;
+  risk_score: number;
+}
+
+export default function CommandCenter() {
   const [stateData, setStateData] = useState<Record<string, DistrictData> | null>(null);
-  const [alerts, setAlerts] = useState<any>(null);
-  const [stockData, setStockData] = useState<any>(null);
+  const [alerts, setAlerts] = useState<{ count: number; summary: Record<string, number>; alerts: AlertData[] } | null>(null);
+  const [stockData, setStockData] = useState<{ overall_readiness: number; summary: { critical_items: number } } | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    setLoading(true);
+  const fetchStateData = useCallback(async () => {
     try {
       const [forecast, alertsRes, stock] = await Promise.all([
         getStateForecast(14),
@@ -51,209 +58,210 @@ export default function HomePage() {
       setLastUpdate(new Date());
     } catch (error) {
       console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setLoading(true);
+    fetchStateData();
+  }, [fetchStateData]);
+
+  useEffect(() => {
+    fetchStateData();
+  }, [fetchStateData]);
+
+  const districts = stateData ? Object.entries(stateData) : [];
+  const redCount = districts.filter(([, d]) => d.risk_level === "red").length;
+  const orangeCount = districts.filter(([, d]) => d.risk_level === "orange").length;
+  const totalCases = districts.reduce((sum, [, d]) => sum + d.total_predicted_cases, 0);
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "50vh" }}>
-        <RefreshCw className="animate-spin" size={32} />
+      <div className="min-h-screen flex items-center justify-center">
+        <RefreshCw className="animate-spin text-accent" size={24} />
       </div>
     );
   }
 
-  // Calculate summary stats
-  const districts = stateData ? Object.entries(stateData) : [];
-  const redCount = districts.filter(([_, d]) => d.risk_level === "red").length;
-  const orangeCount = districts.filter(([_, d]) => d.risk_level === "orange").length;
-  const totalCases = districts.reduce((sum, [_, d]) => sum + d.total_predicted_cases, 0);
-
   return (
-    <div>
-      {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>State Overview</h1>
-            <p style={{ color: "var(--muted)" }}>Rajasthan Medicine Demand Forecasting Dashboard</p>
+    <div className="min-h-screen bg-[var(--bg-base)]">
+      {/* Page Header */}
+      <header className="page-header">
+        <div className="page-title">
+          <span>Command Center</span>
+          <span className="text-sm font-normal text-secondary">Rajasthan State</span>
+        </div>
+        <div className="page-meta">
+          <div className="flex items-center gap-2">
+            <Clock size={14} />
+            <span>{lastUpdate.toLocaleTimeString()}</span>
           </div>
-          <button onClick={loadData} className="btn btn-ghost">
-            <RefreshCw size={16} />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="text-secondary hover:text-primary"
+          >
+            <RefreshCw size={14} className={cn("mr-2", loading && "animate-spin")} />
             Refresh
-          </button>
+          </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Stats Grid */}
-      <div className="bento-grid bento-grid-4" style={{ marginBottom: 32 }}>
-        <StatCard
-          icon={<AlertTriangle color="#ef4444" />}
-          label="High Risk Districts"
-          value={redCount + orangeCount}
-          subtext={`${redCount} critical, ${orangeCount} elevated`}
-          trend={redCount > 0 ? "critical" : "normal"}
-        />
-        <StatCard
-          icon={<TrendingUp color="#3b82f6" />}
-          label="14-Day Case Forecast"
-          value={totalCases.toLocaleString()}
-          subtext="across all districts"
-        />
-        <StatCard
-          icon={<Package color="#22c55e" />}
-          label="Stock Readiness"
-          value={`${stockData?.overall_readiness || 0}%`}
-          subtext={`${stockData?.summary?.critical_items || 0} critical items`}
-          trend={stockData?.overall_readiness > 70 ? "good" : "warning"}
-        />
-        <StatCard
-          icon={<Activity color="#8b5cf6" />}
-          label="Active Alerts"
-          value={alerts?.count || 0}
-          subtext={`${alerts?.summary?.red || 0} 🔴  ${alerts?.summary?.orange || 0} 🟠`}
-        />
-      </div>
-
-      {/* Main Grid */}
-      <div className="bento-grid bento-grid-2">
-        {/* District Risk Map */}
-        <div className="card" style={{ gridColumn: "span 1" }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>District Risk Levels</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {districts
-              .sort((a, b) => {
-                const order: Record<string, number> = { red: 0, orange: 1, yellow: 2, green: 3 };
-                return order[a[1].risk_level] - order[b[1].risk_level];
-              })
-              .map(([id, district]) => (
-                <Link
-                  href={`/district/${id}`}
-                  key={id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "12px 16px",
-                    background: "var(--card)",
-                    borderRadius: 8,
-                    textDecoration: "none",
-                    color: "inherit",
-                    transition: "all 0.2s ease"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontSize: 20 }}>{getRiskEmoji(district.risk_level)}</span>
-                    <div>
-                      <div style={{ fontWeight: 500 }}>{district.district_name}</div>
-                      <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                        {district.total_predicted_cases} cases predicted
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span
-                      className={`badge badge-${district.risk_level}`}
-                    >
-                      {district.risk_level}
-                    </span>
-                    <ChevronRight size={16} color="var(--muted)" />
-                  </div>
-                </Link>
-              ))}
-          </div>
+      <div className="p-8 space-y-8">
+        {/* Metrics Row — Secondary importance */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCard
+            icon={<AlertTriangle size={18} />}
+            label="Elevated Risk"
+            value={redCount + orangeCount}
+            suffix="districts"
+            variant={redCount > 0 ? "critical" : orangeCount > 0 ? "warning" : "default"}
+          />
+          <MetricCard
+            icon={<TrendingUp size={18} />}
+            label="14-Day Forecast"
+            value={totalCases.toLocaleString()}
+            suffix="cases"
+          />
+          <MetricCard
+            icon={<Package2 size={18} />}
+            label="Stock Readiness"
+            value={stockData?.overall_readiness || 0}
+            suffix="%"
+            variant={
+              (stockData?.overall_readiness || 0) < 50 ? "critical" :
+                (stockData?.overall_readiness || 0) < 70 ? "warning" : "default"
+            }
+          />
+          <MetricCard
+            icon={<Activity size={18} />}
+            label="Active Alerts"
+            value={alerts?.count || 0}
+            suffix="active"
+          />
         </div>
 
-        {/* Alerts Panel */}
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600 }}>Active Alerts</h2>
-            <Link href="/alerts" style={{ color: "var(--accent)", fontSize: 14, textDecoration: "none" }}>
-              View All →
-            </Link>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {alerts?.alerts?.slice(0, 5).map((alert: any) => (
-              <div
-                key={alert.id}
-                className={`alert-card alert-card-${alert.level}`}
-              >
-                <div style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 8,
-                  background: getRiskColor(alert.level),
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0
-                }}>
-                  <AlertTriangle size={20} color="white" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>{alert.title}</div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.4 }}>
-                    {alert.message}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {(!alerts?.alerts || alerts.alerts.length === 0) && (
-              <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
-                No active alerts
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div style={{ marginTop: 32, textAlign: "center", color: "var(--muted)", fontSize: 12 }}>
-        Last updated: {lastUpdate.toLocaleString()} • Powered by MedPredict AI
+        {/* District Table — THE HERO */}
+        <Panel>
+          <PanelHeader
+            actions={
+              <span className="text-sm text-muted">
+                {districts.length} districts monitored
+              </span>
+            }
+          >
+            District Overview
+          </PanelHeader>
+          <PanelBody noPadding>
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>District</th>
+                    <th>Risk Level</th>
+                    <th>Risk Score</th>
+                    <th>14-Day Forecast</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {districts
+                    .sort((a, b) => {
+                      const order: Record<string, number> = { red: 0, orange: 1, yellow: 2, green: 3 };
+                      return order[a[1].risk_level] - order[b[1].risk_level];
+                    })
+                    .map(([id, district]) => (
+                      <tr key={id}>
+                        <td className="font-medium">{district.district_name}</td>
+                        <td>
+                          <RiskBadge level={district.risk_level} />
+                        </td>
+                        <td className="font-mono text-secondary">
+                          {(district.risk_score * 100).toFixed(0)}%
+                        </td>
+                        <td className="font-mono text-secondary">
+                          {district.total_predicted_cases} cases
+                        </td>
+                        <td>
+                          <Link href={`/district/${id}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-accent">
+                              <ChevronRight size={16} />
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </PanelBody>
+        </Panel>
       </div>
     </div>
   );
 }
 
-function StatCard({
+/* ===== COMPONENTS ===== */
+
+function MetricCard({
   icon,
   label,
   value,
-  subtext,
-  trend
+  suffix,
+  variant = "default"
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  subtext: string;
-  trend?: string;
+  suffix: string;
+  variant?: 'critical' | 'warning' | 'default';
 }) {
+  const valueColor = {
+    critical: 'text-critical',
+    warning: 'text-warning',
+    default: 'text-primary'
+  };
+
   return (
-    <div className="card">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{
-          width: 40,
-          height: 40,
-          borderRadius: 10,
-          background: "rgba(255,255,255,0.05)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }}>
-          {icon}
-        </div>
-        <span style={{ color: "var(--muted)", fontSize: 14 }}>{label}</span>
+    <div className="metric-card">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-muted">{icon}</span>
+        <span className="metric-label">{label}</span>
       </div>
-      <div className="stat-value">{value}</div>
-      <div style={{
-        marginTop: 8,
-        fontSize: 13,
-        color: trend === "critical" ? "var(--danger)" : trend === "good" ? "var(--success)" : "var(--muted)"
-      }}>
-        {subtext}
+      <div className="flex items-baseline gap-1">
+        <span className={cn("metric-value", valueColor[variant])}>
+          {value}
+        </span>
+        <span className="metric-suffix">{suffix}</span>
       </div>
     </div>
+  );
+}
+
+function RiskBadge({ level }: { level: string }) {
+  const config = {
+    red: { label: 'Critical', class: 'risk-red' },
+    orange: { label: 'Elevated', class: 'risk-orange' },
+    yellow: { label: 'Watch', class: 'risk-yellow' },
+    green: { label: 'Normal', class: 'risk-green' }
+  };
+
+  const { label, class: className } = config[level as keyof typeof config] || config.green;
+
+  return (
+    <span className={cn("risk-badge", className)}>
+      <span className={cn(
+        "status-dot",
+        level === 'red' ? 'status-critical' :
+          level === 'orange' ? 'status-warning' :
+            level === 'yellow' ? 'status-warning' :
+              'status-success'
+      )} />
+      {label}
+    </span>
   );
 }

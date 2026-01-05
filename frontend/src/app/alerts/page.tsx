@@ -1,39 +1,50 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Bell,
-    AlertTriangle,
     TrendingUp,
     CloudRain,
     Calendar,
     Activity,
-    RefreshCw
+    RefreshCw,
+    Clock
 } from "lucide-react";
+import { Panel, PanelHeader, PanelBody } from "@/components/ui/Panel";
+import { cn } from "@/lib/utils";
 import {
     getAlerts,
-    getDistrictSignals,
-    getRiskColor
+    getDistrictSignals
 } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
-export default function AlertsPage() {
-    const [alerts, setAlerts] = useState<any>(null);
+interface Alert {
+    id: string;
+    district_id: string;
+    district_name: string;
+    level: string;
+    risk_score: number;
+    message: string;
+    signals: Record<string, number>;
+}
+
+interface Signals {
+    district_name: string;
+    overall_risk: { score: number; level: string };
+    signals: {
+        weather: { value: number; description: string; data: Record<string, number> };
+        seasonal: { value: number; description: string };
+        trend: { value: number; description: string };
+    };
+}
+
+export default function ThreatDetection() {
+    const [alerts, setAlerts] = useState<{ count: number; summary: Record<string, number>; alerts: Alert[] } | null>(null);
     const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
-    const [signals, setSignals] = useState<any>(null);
+    const [signals, setSignals] = useState<Signals | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    useEffect(() => {
-        if (selectedDistrict) {
-            loadSignals(selectedDistrict);
-        }
-    }, [selectedDistrict]);
-
-    async function loadData() {
-        setLoading(true);
+    const loadData = useCallback(async () => {
         try {
             const data = await getAlerts();
             setAlerts(data);
@@ -42,178 +53,229 @@ export default function AlertsPage() {
             }
         } catch (error) {
             console.error("Error loading alerts:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }
+    }, []);
 
-    async function loadSignals(districtId: string) {
+    const loadSignals = useCallback(async (districtId: string) => {
         try {
             const data = await getDistrictSignals(districtId);
             setSignals(data);
         } catch (error) {
             console.error("Error loading signals:", error);
         }
-    }
+    }, []);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useEffect(() => {
+        if (selectedDistrict) {
+            loadSignals(selectedDistrict);
+        }
+    }, [selectedDistrict, loadSignals]);
 
     if (loading) {
         return (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "50vh" }}>
-                <RefreshCw className="animate-spin" size={32} />
+            <div className="min-h-screen flex items-center justify-center">
+                <RefreshCw className="animate-spin text-accent" size={24} />
             </div>
         );
     }
 
     return (
-        <div>
-            {/* Header */}
-            <div style={{ marginBottom: 32 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>
-                            🚨 Early Warning Console
-                        </h1>
-                        <p style={{ color: "var(--muted)" }}>
-                            Multi-signal outbreak detection and risk monitoring
-                        </p>
-                    </div>
-                    <div style={{ display: "flex", gap: 12 }}>
-                        <span className="badge badge-red">{alerts?.summary?.red || 0} Critical</span>
-                        <span className="badge badge-orange">{alerts?.summary?.orange || 0} Elevated</span>
-                        <span className="badge badge-yellow">{alerts?.summary?.yellow || 0} Watch</span>
-                    </div>
-                </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 24 }}>
-                {/* Alert List */}
-                <div className="card">
-                    <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Active Alerts</h2>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {alerts?.alerts?.map((alert: any) => (
-                            <div
-                                key={alert.id}
-                                onClick={() => setSelectedDistrict(alert.district_id)}
-                                style={{
-                                    padding: 16,
-                                    borderRadius: 8,
-                                    background: selectedDistrict === alert.district_id ? 'rgba(59,130,246,0.1)' : 'var(--card)',
-                                    border: `1px solid ${selectedDistrict === alert.district_id ? 'var(--accent)' : 'var(--border)'}`,
-                                    cursor: "pointer",
-                                    transition: "all 0.2s ease"
-                                }}
-                            >
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                                    <div style={{
-                                        width: 10,
-                                        height: 10,
-                                        borderRadius: "50%",
-                                        background: getRiskColor(alert.level),
-                                        boxShadow: `0 0 8px ${getRiskColor(alert.level)}`
-                                    }} />
-                                    <span style={{ fontWeight: 600 }}>{alert.district_name}</span>
-                                    <span className={`badge badge-${alert.level}`} style={{ marginLeft: "auto" }}>
-                                        {alert.level}
-                                    </span>
-                                </div>
-                                <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                                    {alert.message}
-                                </div>
-                            </div>
-                        ))}
-
-                        {(!alerts?.alerts || alerts.alerts.length === 0) && (
-                            <div style={{ textAlign: "center", padding: 60, color: "var(--muted)" }}>
-                                <Bell size={40} style={{ opacity: 0.3, marginBottom: 16 }} />
-                                <div>No active alerts</div>
-                                <div style={{ fontSize: 13, marginTop: 4 }}>All districts within normal parameters</div>
-                            </div>
+        <div className="min-h-screen bg-[var(--bg-base)]">
+            {/* Page Header */}
+            <header className="page-header">
+                <div className="page-title">
+                    <span>Threat Detection</span>
+                    <div className="flex gap-2 ml-4">
+                        {(alerts?.summary?.red || 0) > 0 && (
+                            <span className="risk-badge risk-red">
+                                {alerts?.summary?.red} critical
+                            </span>
+                        )}
+                        {(alerts?.summary?.orange || 0) > 0 && (
+                            <span className="risk-badge risk-orange">
+                                {alerts?.summary?.orange} elevated
+                            </span>
+                        )}
+                        {(alerts?.summary?.yellow || 0) > 0 && (
+                            <span className="risk-badge risk-yellow">
+                                {alerts?.summary?.yellow} watch
+                            </span>
                         )}
                     </div>
                 </div>
+                <div className="page-meta">
+                    <div className="flex items-center gap-2">
+                        <Clock size={14} />
+                        <span>{new Date().toLocaleTimeString()}</span>
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setLoading(true); loadData(); }}
+                        className="text-secondary hover:text-primary"
+                    >
+                        <RefreshCw size={14} className="mr-2" />
+                        Refresh
+                    </Button>
+                </div>
+            </header>
 
-                {/* Signal Analysis */}
-                <div className="card">
-                    <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>
-                        📊 Signal Analysis: {signals?.district_name || "Select a district"}
-                    </h2>
-
-                    {signals && (
-                        <div>
-                            {/* Overall Risk */}
-                            <div style={{
-                                padding: 20,
-                                background: `${getRiskColor(signals.overall_risk?.level)}15`,
-                                borderRadius: 12,
-                                border: `1px solid ${getRiskColor(signals.overall_risk?.level)}30`,
-                                marginBottom: 24,
-                                textAlign: "center"
-                            }}>
-                                <div style={{ fontSize: 14, color: "var(--muted)", marginBottom: 8 }}>Combined Risk Score</div>
-                                <div style={{
-                                    fontSize: 48,
-                                    fontWeight: 700,
-                                    color: getRiskColor(signals.overall_risk?.level)
-                                }}>
-                                    {((signals.overall_risk?.score || 0) * 100).toFixed(0)}%
-                                </div>
-                                <div style={{ marginTop: 8 }}>
-                                    <span className={`badge badge-${signals.overall_risk?.level}`}>
-                                        {signals.overall_risk?.level?.toUpperCase()} RISK
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Signal Bars */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                                <SignalBar
-                                    icon={<CloudRain size={18} />}
-                                    label="Weather Signal"
-                                    value={signals.signals?.weather?.value || 0}
-                                    description={signals.signals?.weather?.description}
-                                />
-                                <SignalBar
-                                    icon={<Calendar size={18} />}
-                                    label="Seasonal Pattern"
-                                    value={signals.signals?.seasonal?.value || 0}
-                                    description={signals.signals?.seasonal?.description}
-                                />
-                                <SignalBar
-                                    icon={<TrendingUp size={18} />}
-                                    label="Case Trend"
-                                    value={signals.signals?.trend?.value || 0}
-                                    description={signals.signals?.trend?.description}
-                                />
-                            </div>
-
-                            {/* Weather Data */}
-                            {signals.signals?.weather?.data && (
-                                <div style={{ marginTop: 24, padding: 16, background: "var(--card)", borderRadius: 8 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Current Conditions</div>
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "var(--muted)" }}>Temperature</div>
-                                            <div style={{ fontWeight: 600 }}>{signals.signals.weather.data.temperature?.toFixed(1)}°C</div>
+            <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Alert List */}
+                    <Panel>
+                        <PanelHeader>
+                            Active Alerts ({alerts?.count || 0})
+                        </PanelHeader>
+                        <PanelBody noPadding>
+                            <div className="divide-y divide-[var(--border-muted)] max-h-[600px] overflow-y-auto">
+                                {alerts?.alerts?.map((alert) => (
+                                    <button
+                                        key={alert.id}
+                                        onClick={() => setSelectedDistrict(alert.district_id)}
+                                        className={cn(
+                                            "w-full text-left p-4 transition-colors",
+                                            selectedDistrict === alert.district_id
+                                                ? "bg-[var(--accent-muted)] border-l-2 border-l-[var(--accent)]"
+                                                : "hover:bg-[var(--bg-elevated)] border-l-2 border-l-transparent"
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <span className={cn(
+                                                "status-dot",
+                                                alert.level === 'red' ? 'status-critical' :
+                                                    alert.level === 'orange' ? 'status-warning' :
+                                                        'status-muted'
+                                            )} />
+                                            <span className="font-medium">{alert.district_name}</span>
+                                            <span className={cn(
+                                                "text-sm font-mono ml-auto",
+                                                alert.level === 'red' ? 'text-critical' :
+                                                    alert.level === 'orange' ? 'text-warning' :
+                                                        'text-muted'
+                                            )}>
+                                                {(alert.risk_score * 100).toFixed(0)}%
+                                            </span>
                                         </div>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "var(--muted)" }}>Rainfall (14d)</div>
-                                            <div style={{ fontWeight: 600 }}>{signals.signals.weather.data.rainfall_14d?.toFixed(0)}mm</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: "var(--muted)" }}>Humidity</div>
-                                            <div style={{ fontWeight: 600 }}>{signals.signals.weather.data.humidity?.toFixed(0)}%</div>
-                                        </div>
+                                        <p className="text-sm text-secondary line-clamp-2">
+                                            {alert.message}
+                                        </p>
+                                    </button>
+                                ))}
+
+                                {(!alerts?.alerts || alerts.alerts.length === 0) && (
+                                    <div className="text-center py-16">
+                                        <Bell size={32} className="mx-auto mb-3 text-muted opacity-40" />
+                                        <p className="text-secondary">No active alerts</p>
+                                        <p className="text-sm text-muted mt-1">All districts within normal parameters</p>
                                     </div>
+                                )}
+                            </div>
+                        </PanelBody>
+                    </Panel>
+
+                    {/* Signal Analysis */}
+                    <Panel className="lg:col-span-2">
+                        <PanelHeader
+                            actions={
+                                signals && (
+                                    <span className="text-sm text-muted">
+                                        {signals.district_name}
+                                    </span>
+                                )
+                            }
+                        >
+                            Signal Analysis
+                        </PanelHeader>
+                        <PanelBody>
+                            {signals ? (
+                                <div className="space-y-8">
+                                    {/* Risk Score */}
+                                    <div className={cn(
+                                        "text-center p-8 rounded-lg border",
+                                        signals.overall_risk?.level === 'red' ? 'bg-[var(--status-critical-muted)] border-[var(--status-critical)]' :
+                                            signals.overall_risk?.level === 'orange' ? 'bg-[var(--status-warning-muted)] border-[var(--status-warning)]' :
+                                                'bg-[var(--bg-elevated)] border-[var(--border)]'
+                                    )}>
+                                        <div className="text-sm text-muted uppercase tracking-wide mb-2">
+                                            Composite Threat Score
+                                        </div>
+                                        <div className={cn(
+                                            "text-5xl font-bold font-mono",
+                                            signals.overall_risk?.level === 'red' ? 'text-critical' :
+                                                signals.overall_risk?.level === 'orange' ? 'text-warning' :
+                                                    'text-primary'
+                                        )}>
+                                            {((signals.overall_risk?.score || 0) * 100).toFixed(0)}%
+                                        </div>
+                                        <span className={cn(
+                                            "inline-block mt-3 risk-badge",
+                                            `risk-${signals.overall_risk?.level || 'green'}`
+                                        )}>
+                                            {(signals.overall_risk?.level || 'normal').toUpperCase()}
+                                        </span>
+                                    </div>
+
+                                    {/* Signal Breakdown */}
+                                    <div className="space-y-6">
+                                        <SignalBar
+                                            icon={<CloudRain size={18} />}
+                                            label="Weather Signal"
+                                            value={signals.signals?.weather?.value || 0}
+                                            description={signals.signals?.weather?.description}
+                                            note="14-day lagged"
+                                        />
+                                        <SignalBar
+                                            icon={<Calendar size={18} />}
+                                            label="Seasonal Pattern"
+                                            value={signals.signals?.seasonal?.value || 0}
+                                            description={signals.signals?.seasonal?.description}
+                                        />
+                                        <SignalBar
+                                            icon={<TrendingUp size={18} />}
+                                            label="Case Trend"
+                                            value={signals.signals?.trend?.value || 0}
+                                            description={signals.signals?.trend?.description}
+                                        />
+                                    </div>
+
+                                    {/* Environmental Data */}
+                                    {signals.signals?.weather?.data && (
+                                        <div className="p-5 bg-[var(--bg-elevated)] rounded-lg">
+                                            <div className="text-xs text-muted uppercase tracking-wide mb-4">
+                                                Environmental Telemetry
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-6">
+                                                <div>
+                                                    <div className="text-xs text-muted mb-1">Temperature</div>
+                                                    <div className="text-xl font-mono">{signals.signals.weather.data.temperature?.toFixed(1)}°C</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-muted mb-1">Rainfall (Lag)</div>
+                                                    <div className="text-xl font-mono">{signals.signals.weather.data.rainfall_lag_14d?.toFixed(0) || 0}mm</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-muted mb-1">Humidity</div>
+                                                    <div className="text-xl font-mono">{signals.signals.weather.data.humidity?.toFixed(0)}%</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center py-16">
+                                    <Activity size={32} className="mx-auto mb-3 text-muted opacity-40" />
+                                    <p className="text-secondary">Select an alert to view analysis</p>
                                 </div>
                             )}
-                        </div>
-                    )}
-
-                    {!signals && (
-                        <div style={{ textAlign: "center", padding: 60, color: "var(--muted)" }}>
-                            <Activity size={40} style={{ opacity: 0.3, marginBottom: 16 }} />
-                            <div>Select a district to view signal analysis</div>
-                        </div>
-                    )}
+                        </PanelBody>
+                    </Panel>
                 </div>
             </div>
         </div>
@@ -224,39 +286,45 @@ function SignalBar({
     icon,
     label,
     value,
-    description
+    description,
+    note
 }: {
     icon: React.ReactNode;
     label: string;
     value: number;
     description?: string;
+    note?: string;
 }) {
     const percentage = (value * 100).toFixed(0);
 
+    const getBarColor = (val: number) => {
+        if (val > 0.7) return 'bg-[var(--status-critical)]';
+        if (val > 0.5) return 'bg-[var(--status-warning)]';
+        return 'bg-[var(--accent)]';
+    };
+
     return (
         <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {icon}
-                    <span style={{ fontWeight: 500 }}>{label}</span>
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                    <span className="text-muted">{icon}</span>
+                    <span className="font-medium">{label}</span>
+                    {note && (
+                        <span className="text-xs text-accent bg-[var(--accent-muted)] px-2 py-0.5 rounded">
+                            {note}
+                        </span>
+                    )}
                 </div>
-                <span style={{ fontWeight: 600 }}>{percentage}%</span>
+                <span className="font-mono text-lg">{percentage}%</span>
             </div>
-            <div className="signal-bar">
+            <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
                 <div
-                    className="signal-fill"
-                    style={{
-                        width: `${percentage}%`,
-                        background: value > 0.7 ? 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)' :
-                            value > 0.5 ? 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)' :
-                                'linear-gradient(90deg, #3b82f6 0%, #2563eb 100%)'
-                    }}
+                    className={cn("h-full transition-all duration-500 rounded-full", getBarColor(value))}
+                    style={{ width: `${percentage}%` }}
                 />
             </div>
             {description && (
-                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
-                    {description}
-                </div>
+                <p className="text-sm text-secondary mt-2">{description}</p>
             )}
         </div>
     );
