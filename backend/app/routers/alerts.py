@@ -76,7 +76,7 @@ async def get_district_signals(district_id: str):
         },
         'signals': {
             'weather': {
-                'value': risk['signals']['weather'],
+                'value': risk['signals'].get('causal_weather', risk['signals'].get('weather', 0)),
                 'description': _describe_weather_signal(weather),
                 'data': weather
             },
@@ -106,12 +106,13 @@ async def get_alert_timeline(district_id: str, days: int = Query(7, ge=1, le=30)
     risk = forecaster.calculate_risk_score(district_id)
     
     # Create timeline entries based on current signals
-    if risk['signals']['weather'] > 0.6:
+    weather_signal = risk['signals'].get('causal_weather', risk['signals'].get('weather', 0))
+    if weather_signal > 0.6:
         timeline.append({
             'date': base_date.strftime('%Y-%m-%d'),
             'event': 'weather_signal',
-            'level': 'orange' if risk['signals']['weather'] > 0.7 else 'yellow',
-            'message': f"Rainfall accumulated to {risk['weather_data']['rainfall_14d']:.0f}mm (14-day)"
+            'level': 'orange' if weather_signal > 0.7 else 'yellow',
+            'message': f"Weather conditions from 14 days ago indicate elevated risk"
         })
     
     if risk['signals']['trend'] > 0.6:
@@ -148,10 +149,11 @@ def _get_alert_title(level: str, district_name: str) -> str:
 def _get_alert_message(risk: dict, anomalies: list) -> str:
     parts = []
     
-    if risk['signals']['weather'] > 0.7:
-        parts.append(f"Weather conditions favorable for disease transmission")
+    weather_signal = risk['signals'].get('causal_weather', risk['signals'].get('weather', 0))
+    if weather_signal > 0.7:
+        parts.append(f"Causal weather signal (14-day lag) indicates high transmission risk")
     
-    if risk['signals']['trend'] > 0.6:
+    if risk['signals'].get('trend', 0) > 0.6:
         parts.append(f"Case trend showing increase")
     
     for anomaly in anomalies:
@@ -182,10 +184,13 @@ def _get_recommended_actions(level: str) -> List[str]:
 
 
 def _describe_weather_signal(weather: dict) -> str:
-    if weather['rainfall_14d'] > 100:
-        return f"Heavy rainfall ({weather['rainfall_14d']:.0f}mm in 14 days) creating breeding conditions"
-    elif weather['rainfall_14d'] > 50:
-        return f"Moderate rainfall ({weather['rainfall_14d']:.0f}mm) with favorable temperature"
+    rainfall = weather.get('rainfall_lag_14d', weather.get('rainfall_14d', 0))
+    breeding_index = weather.get('breeding_index_lag', 0)
+    
+    if breeding_index > 1.0:
+        return f"High mosquito breeding conditions (index: {breeding_index:.2f})"
+    elif rainfall > 50:
+        return f"Moderate rainfall ({rainfall:.0f}mm) with favorable temperature"
     else:
         return f"Low rainfall, limited mosquito breeding"
 
