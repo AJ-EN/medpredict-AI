@@ -1,0 +1,73 @@
+{
+  "districts": [
+    {"id": "RJ-JP", "name": "Jaipur", "population": 6626178, "type": "urban", "lat": 26.9124, "lng": 75.7873},
+    {"id": "RJ-JD", "name": "Jodhpur", "population": 3687165, "type": "mixed", "lat": 26.2389, "lng": 73.0243},
+    {"id": "RJ-UD", "name": "Udaipur", "population": 3068420, "type": "mixed", "lat": 24.5854, "lng": 73.7125},
+    {"id": "RJ-BR", "name": "Barmer", "population": 2603751, "type": "rural", "lat": 25.7521, "lng": 71.3967},
+    {"id": "RJ-AJ", "name": "Ajmer", "population": 2583052, "type": "mixed", "lat": 26.4499, "lng": 74.6399},
+    {"id": "RJ-AL", "name": "Alwar", "population": 3674179, "type": "mixed", "lat": 27.5530, "lng": 76.6346},
+    {"id": "RJ-BK", "name": "Bikaner", "population": 2363937, "type": "mixed", "lat": 28.0229, "lng": 73.3119},
+    {"id": "RJ-KT", "name": "Kota", "population": 1950491, "type": "urban", "lat": 25.2138, "lng": 75.8648},
+    {"id": "RJ-SR", "name": "Sikar", "population": 2677737, "type": "rural", "lat": 27.6094, "lng": 75.1398},
+    {"id": "RJ-JL", "name": "Jalore", "population": 1828730, "type": "rural", "lat": 25.3457, "lng": 72.6173},
+    {"id": "RJ-NW", "name": "Nagaur", "population": 3307743, "type": "rural", "lat": 27.1987, "lng": 73.7350},
+    {"id": "RJ-PT", "name": "Pali", "population": 2037573, "type": "rural", "lat": 25.7711, "lng": 73.3234}
+  ],
+  "medicines": [
+    {
+      "id": "PARA-500",
+      "name": "Paracetamol 500mg",
+      "category": "antipyretic",
+      "unit": "tablet",
+      "shelf_life_days": 730,
+      "cold_chain": false,
+      "diseases": ["dengue", "malaria", "flu", "fever"],
+      "prescription_rate": 0.95,
+      "units_per_case": 20
+    },
+    {
+      "id": "IV-RL",
+      "name": "IV Ringer Lactate 500ml",
+      "category": "fluid",
+      "unit": "bottle",
+      "shelf_life_days": 365,
+      "cold_chain": false,
+      "diseases": ["dengue", "diarrhea", "cholera"],
+      "prescription_rate": 0.30,
+      "units_per_case": 5
+    },
+    {
+      "id": "NS1-KIT",
+      "name": "NS1 Dengue Test Kit",
+      "category": "diagnostic",
+      "unit": "kit",
+      "shelf_life_days": 180,
+      "cold_chain": true,
+      "diseases": ["dengue"],
+      "prescription_rate": 0.80,
+      "units_per_case": 1
+    },
+    {
+      "id": "ORS-PKT",
+      "name": "ORS Packet",
+      "category": "rehydration",
+      "unit": "packet",
+      "shelf_life_days": 540,
+      "cold_chain": false,
+      "diseases": ["diarrhea", "cholera", "dengue"],
+      "prescription_rate": 0.85,
+      "units_per_case": 6
+    },
+    {
+      "id": "ACT-TAB",
+      "name": "Artemisinin Combination Therapy",
+      "category": "antimalarial",
+      "unit": "course",
+      "shelf_life_days": 365,
+      "cold_chain": false,
+      "diseases": ["malaria"],
+      "prescription_rate": 0.90,
+      "units_per_case": 1
+    }
+  ]
+}

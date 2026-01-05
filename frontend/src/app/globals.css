@@ -1,0 +1,348 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #ffffff;
+  --card: #12121a;
+  --card-hover: #1a1a24;
+  --border: #2a2a3a;
+  --muted: #71717a;
+  --accent: #3b82f6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.1);
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --success-bg: rgba(34, 197, 94, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Glassmorphism card */
+.card {
+  background: linear-gradient(135deg, rgba(18, 18, 26, 0.9) 0%, rgba(18, 18, 26, 0.7) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  background: linear-gradient(135deg, rgba(26, 26, 36, 0.9) 0%, rgba(26, 26, 36, 0.7) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Risk level badges */
+.badge {
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-red {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-orange {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-yellow {
+  background: rgba(234, 179, 8, 0.1);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-green {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+/* Progress bars */
+.progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.progress-critical {
+  background: linear-gradient(90deg, var(--danger) 0%, #dc2626 100%);
+}
+
+.progress-warning {
+  background: linear-gradient(90deg, var(--warning) 0%, #d97706 100%);
+}
+
+.progress-good {
+  background: linear-gradient(90deg, var(--success) 0%, #16a34a 100%);
+}
+
+/* Signal bars */
+.signal-bar {
+  height: 24px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.signal-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  background: linear-gradient(90deg, var(--accent) 0%, #2563eb 100%);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgba(18, 18, 26, 0.95) 0%, rgba(10, 10, 15, 0.98) 100%);
+  border-right: 1px solid var(--border);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover,
+.sidebar-link.active {
+  color: var(--foreground);
+  background: rgba(59, 130, 246, 0.1);
+  border-left-color: var(--accent);
+}
+
+/* Main content */
+.main-content {
+  margin-left: 280px;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+/* Grid layouts */
+.bento-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.bento-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.bento-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.bento-grid-2 {
+  grid-template-columns: 1fr 2fr;
+}
+
+@media (max-width: 1400px) {
+  .bento-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    display: none;
+  }
+  .main-content {
+    margin-left: 0;
+  }
+  .bento-grid-4,
+  .bento-grid-3,
+  .bento-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Alert cards */
+.alert-card {
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.alert-card-red {
+  background: var(--danger-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.alert-card-orange {
+  background: var(--warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.alert-card-yellow {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+/* Pulse animation for critical alerts */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Stat cards */
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Map container */
+.map-container {
+  width: 100%;
+  height: 400px;
+  background: var(--card);
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Chart customization */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--border);
+}
+
+.recharts-text {
+  fill: var(--muted);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Button styles */
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover {
+  background: var(--card);
+  color: var(--foreground);
+}
+
+/* Slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
