@@ -183,27 +183,28 @@ export default function DistrictAnalysis() {
                                     <AreaChart data={forecast?.forecast || []}>
                                         <defs>
                                             <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                                         <XAxis
                                             dataKey="date"
-                                            tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                                            tick={{ fill: '#a1a1aa', fontSize: 11 }}
                                             tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                            stroke="var(--border)"
+                                            stroke="#3f3f46"
                                         />
                                         <YAxis
-                                            tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
-                                            stroke="var(--border)"
+                                            tick={{ fill: '#a1a1aa', fontSize: 11 }}
+                                            stroke="#3f3f46"
                                         />
                                         <Tooltip
                                             contentStyle={{
-                                                background: 'var(--bg-elevated)',
-                                                border: '1px solid var(--border)',
+                                                background: '#18181b',
+                                                border: '1px solid #3f3f46',
                                                 borderRadius: 6,
-                                                fontSize: 13
+                                                fontSize: 13,
+                                                color: '#fafafa'
                                             }}
                                             labelFormatter={(val) => new Date(val).toLocaleDateString()}
                                         />
@@ -211,19 +212,19 @@ export default function DistrictAnalysis() {
                                             type="monotone"
                                             dataKey="upper_bound"
                                             stroke="transparent"
-                                            fill="var(--accent)"
-                                            fillOpacity={0.1}
+                                            fill="#3b82f6"
+                                            fillOpacity={0.15}
                                         />
                                         <Area
                                             type="monotone"
                                             dataKey="lower_bound"
                                             stroke="transparent"
-                                            fill="var(--bg-base)"
+                                            fill="#0a0a0a"
                                         />
                                         <Line
                                             type="monotone"
                                             dataKey="predicted"
-                                            stroke="var(--accent)"
+                                            stroke="#3b82f6"
                                             strokeWidth={2}
                                             dot={false}
                                         />
@@ -232,11 +233,11 @@ export default function DistrictAnalysis() {
                             </div>
                             <div className="flex gap-6 mt-4 justify-center text-xs text-muted">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-4 h-0.5 bg-[var(--accent)] rounded" />
+                                    <div className="w-4 h-0.5 bg-blue-500 rounded" />
                                     <span>Predicted Cases</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-4 h-3 bg-[var(--accent)] opacity-20 rounded" />
+                                    <div className="w-4 h-3 bg-blue-500 opacity-20 rounded" />
                                     <span>95% Confidence</span>
                                 </div>
                             </div>
