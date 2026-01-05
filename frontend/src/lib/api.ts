@@ -13,18 +13,21 @@ export interface RiskScore {
     score: number;
     level: 'red' | 'orange' | 'yellow' | 'green';
     signals: {
-        weather: number;
+        causal_weather: number;
         seasonal: number;
         trend: number;
+        real_time_warning: number;
     };
     weather_data: {
         temperature: number;
         rainfall: number;
         humidity: number;
-        rainfall_14d: number;
+        rainfall_lag_14d: number;
+        breeding_index_lag?: number;
         condition?: string;
         is_real_data?: boolean;
     };
+    causal_note?: string;
 }
 
 export interface Forecast {
@@ -33,6 +36,10 @@ export interface Forecast {
     lower_bound: number;
     upper_bound: number;
     confidence: number;
+    is_causal?: boolean;
+    estimated_actual?: number;
+    source?: 'Observed Lag' | 'AI Prediction (WeatherNext)' | 'No Data (Fallback)';
+    days_ahead?: number;
 }
 
 export interface Alert {
