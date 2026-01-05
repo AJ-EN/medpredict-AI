@@ -42,6 +42,8 @@ async def lifespan(app: FastAPI):
     
     # Cleanup
     print("Shutting down...")
+    from app.services.weather_service import weather_service
+    await weather_service.close()
 
 
 app = FastAPI(

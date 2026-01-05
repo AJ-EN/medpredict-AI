@@ -47,7 +47,7 @@ async def get_recommendations(district_id: str):
     if district_id not in forecaster.districts:
         raise HTTPException(status_code=404, detail=f"District {district_id} not found")
     
-    recommendations = forecaster.get_recommendations(district_id)
+    recommendations = await forecaster.get_recommendations(district_id)
     
     return {
         'district_id': district_id,
@@ -141,7 +141,7 @@ async def get_suggested_transfers():
     district_status = {}
     for district_id in forecaster.districts.keys():
         stock_status = forecaster.get_stock_status(district_id)
-        risk = forecaster.calculate_risk_score(district_id)
+        risk = await forecaster.calculate_risk_score(district_id)
         
         district_status[district_id] = {
             'name': forecaster.districts[district_id]['name'],

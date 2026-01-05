@@ -21,7 +21,7 @@ async def get_all_alerts(level: Optional[str] = Query(None)):
     
     alerts = []
     for district_id, district in forecaster.districts.items():
-        risk = forecaster.calculate_risk_score(district_id)
+        risk = await forecaster.calculate_risk_score(district_id)
         anomalies = forecaster.detect_anomalies(district_id)
         
         if level and risk['level'] != level:
@@ -63,8 +63,8 @@ async def get_district_signals(district_id: str):
     """Get detailed signal breakdown for a district"""
     forecaster = get_forecaster()
     
-    risk = forecaster.calculate_risk_score(district_id)
-    weather = forecaster.get_current_weather(district_id)
+    risk = await forecaster.calculate_risk_score(district_id)
+    weather = await forecaster.get_current_weather(district_id)
     anomalies = forecaster.detect_anomalies(district_id)
     
     return {
@@ -103,7 +103,7 @@ async def get_alert_timeline(district_id: str, days: int = Query(7, ge=1, le=30)
     timeline = []
     base_date = datetime.now()
     
-    risk = forecaster.calculate_risk_score(district_id)
+    risk = await forecaster.calculate_risk_score(district_id)
     
     # Create timeline entries based on current signals
     weather_signal = risk['signals'].get('causal_weather', risk['signals'].get('weather', 0))

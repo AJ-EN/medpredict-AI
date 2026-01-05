@@ -24,7 +24,7 @@ async def get_state_forecast(days_ahead: int = Query(14, ge=1, le=30)):
     
     results = {}
     for district_id in forecaster.districts.keys():
-        risk = forecaster.calculate_risk_score(district_id)
+        risk = await forecaster.calculate_risk_score(district_id)
         case_forecast = forecaster.forecast_cases(district_id, 'dengue', days_ahead)
         
         # Calculate total predicted cases
@@ -60,7 +60,7 @@ async def get_district_forecast(
         raise HTTPException(status_code=404, detail=f"District {district_id} not found")
     
     case_forecast = forecaster.forecast_cases(district_id, disease, days_ahead)
-    risk = forecaster.calculate_risk_score(district_id)
+    risk = await forecaster.calculate_risk_score(district_id)
     
     return {
         'district_id': district_id,

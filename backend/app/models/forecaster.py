@@ -135,31 +135,74 @@ class CausalDemandForecaster:
                 'y_mean': y.mean()
             }
     
-    def get_current_weather(self, district_id: str) -> dict:
-        """Get latest weather data including lagged features"""
+    async def get_current_weather(self, district_id: str) -> dict:
+        """
+        Get latest weather data.
+        HYBRID: Tries to get REAL data from OpenWeatherMap API first.
+        Falls back to synthetic CSV data if API fails.
+        """
+        # Try to get real data
+        from app.services.weather_service import weather_service
+        
+        real_data = None
+        district = self.districts.get(district_id)
+        
+        if district and 'lat' in district and 'lng' in district:
+            real_data = await weather_service.get_current_weather(
+                district['lat'], 
+                district['lng'], 
+                district_id
+            )
+            
+        # Get synthetic data (for historical context/lag)
         district_weather = self.weather_df[self.weather_df['district_id'] == district_id]
-        latest = district_weather.sort_values('date').iloc[-1]
-        return {
-            'temperature': float(latest['temperature']),
-            'rainfall': float(latest['rainfall']),
-            'humidity': float(latest['humidity']),
-            'rainfall_lag_14d': float(latest.get('rainfall_lag_14d', 0)),
-            'breeding_index_lag': float(latest.get('breeding_index_lag', 0)),
-            # Note: These are the CAUSAL features - weather from 2 weeks ago
-        }
+        latest_synthetic = district_weather.sort_values('date').iloc[-1]
+        
+        if real_data:
+            # We have real data!
+            # Note: For 'rainfall_lag_14d', we still need history.
+            # In a full production system, we would query our DB for 14-day old real data.
+            # For now, we mix Real Current w/ Synthetic Past.
+            return {
+                'temperature': float(real_data['temperature']),
+                'rainfall': float(real_data['rainfall']),
+                'humidity': float(real_data['humidity']),
+                'condition': real_data.get('condition', 'Unknown'),
+                'is_real_data': True,
+                # Lagged features still come from CSV for now
+                'rainfall_lag_14d': float(latest_synthetic.get('rainfall_lag_14d', 0)),
+                'breeding_index_lag': float(latest_synthetic.get('breeding_index_lag', 0)),
+            }
+        else:
+            # Fallback to pure synthetic
+            return {
+                'temperature': float(latest_synthetic['temperature']),
+                'rainfall': float(latest_synthetic['rainfall']),
+                'humidity': float(latest_synthetic['humidity']),
+                'condition': 'Simulated',
+                'is_real_data': False,
+                'rainfall_lag_14d': float(latest_synthetic.get('rainfall_lag_14d', 0)),
+                'breeding_index_lag': float(latest_synthetic.get('breeding_index_lag', 0)),
+            }
     
-    def calculate_risk_score(self, district_id: str) -> Dict:
+    async def calculate_risk_score(self, district_id: str) -> Dict:
         """
-        CAUSAL Risk Score: Based on PAST weather, not current conditions
-        
-        Key insight: If it rained heavily 14 days ago, risk is HIGH now
-        even if today is sunny.
+        CAUSAL Risk Score: Based on PAST weather + REAL TIME Signal
         """
-        weather = self.get_current_weather(district_id)
+        weather = await self.get_current_weather(district_id)
         
-        # Causal weather signal (from 14 days ago)
+        # 1. Causal Signal (Past -> Present Risk)
         breeding_index = weather.get('breeding_index_lag', 0)
         causal_weather_signal = min(breeding_index / 1.5, 1.0) if breeding_index else 0.3
+        
+        # 2. Real-Time Signal (Present -> Future Risk)
+        # If it is raining NOW, we flag a future risk
+        real_time_signal = 0.0
+        if weather.get('is_real_data'):
+            if weather['rainfall'] > 5.0 and weather['temperature'] > 20:
+                 real_time_signal = 0.8  # High risk forming
+            elif weather['rainfall'] > 0:
+                 real_time_signal = 0.4
         
         # Seasonal signal
         today = datetime.now()
@@ -184,11 +227,12 @@ class CausalDemandForecaster:
         else:
             trend_signal = 0.3
         
-        # Combined (CAUSAL weather weighted more heavily)
+        # Combined (Weighted)
         weights = {
-            'causal_weather': 0.45,  # This is the causal predictor
-            'seasonal': 0.25,
+            'causal_weather': 0.40,
+            'seasonal': 0.20,
             'trend': 0.20,
+            'real_time': 0.10, # Bonus from real data
             'baseline': 0.10
         }
         
@@ -196,6 +240,7 @@ class CausalDemandForecaster:
             causal_weather_signal * weights['causal_weather'] +
             seasonal_signal * weights['seasonal'] +
             trend_signal * weights['trend'] +
+            real_time_signal * weights['real_time'] +
             0.3 * weights['baseline']
         )
         
@@ -215,10 +260,11 @@ class CausalDemandForecaster:
             'signals': {
                 'causal_weather': round(causal_weather_signal, 3),
                 'seasonal': round(seasonal_signal, 3),
-                'trend': round(trend_signal, 3)
+                'trend': round(trend_signal, 3),
+                'real_time_warning': round(real_time_signal, 3)
             },
             'weather_data': weather,
-            'causal_note': "Risk based on weather from 14 days ago (biological lag)"
+            'causal_note': "Risk includes REAL-TIME weather data + 14-day causal lag"
         }
     
     def forecast_cases(self, district_id: str, disease: str = 'dengue', days_ahead: int = 14) -> List[Dict]:
@@ -508,10 +554,10 @@ class CausalDemandForecaster:
         
         return {'transfers': transfers, 'orders': orders}
     
-    def get_recommendations(self, district_id: str) -> List[Dict]:
+    async def get_recommendations(self, district_id: str) -> List[Dict]:
         """Generate recommendations using network-aware logic"""
         stock_status = self.get_stock_status(district_id)
-        risk = self.calculate_risk_score(district_id)
+        risk = await self.calculate_risk_score(district_id)
         network_plan = self.optimize_network_transfers()
         
         recommendations = []
