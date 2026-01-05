@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 
-from app.routers import forecast, alerts, recommendations, stock
+from app.routers import forecast, alerts, recommendations, stock, transfers
+from app.db.database import create_db_and_tables
 from app.data.synthetic import generate_all_data
 from app.models.forecaster import DemandForecaster
 
@@ -27,6 +28,9 @@ async def lifespan(app: FastAPI):
     config_path = Path(__file__).parent.parent / "data" / "config.json"
     with open(config_path) as f:
         config = json.load(f)
+    
+    # Initialize database tables (for Transfer Verification Protocol)
+    create_db_and_tables()
     
     # Generate synthetic data if not exists
     data_dir = Path(__file__).parent.parent / "data"
@@ -67,6 +71,7 @@ app.include_router(forecast.router, prefix="/api/forecast", tags=["forecast"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["recommendations"])
 app.include_router(stock.router, prefix="/api/stock", tags=["stock"])
+app.include_router(transfers.router, prefix="/api/transfers", tags=["transfers"])
 
 
 @app.get("/")

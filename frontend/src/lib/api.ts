@@ -137,6 +137,115 @@ export async function simulateScenario(severityMultiplier: number, responseDays:
     return res.json();
 }
 
+// ===== TRANSFER VERIFICATION PROTOCOL =====
+
+export interface Transfer {
+    id: string;
+    medicine_id: string;
+    quantity: number;
+    from_district_id: string;
+    to_district_id: string;
+    status: 'created' | 'picked_up' | 'delivered' | 'verified' | 'disputed';
+    priority: 'normal' | 'urgent' | 'critical';
+    created_at: string;
+    created_by: string;
+    sender_signature: string | null;
+    pickup_at: string | null;
+    transporter_id: string | null;
+    transporter_signature: string | null;
+    delivered_at: string | null;
+    receiver_id: string | null;
+    receiver_signature: string | null;
+    received_quantity: number | null;
+    verification_hash: string | null;
+    is_verified: boolean;
+    has_discrepancy: boolean;
+    discrepancy_type: string | null;
+    discrepancy_notes: string | null;
+}
+
+export interface TransferAnomaly {
+    type: string;
+    severity: 'critical' | 'warning';
+    message: string;
+    missing_units?: number;
+}
+
+export async function getTransfers(filters?: { status?: string; has_discrepancy?: boolean }) {
+    let url = `${API_BASE}/api/transfers/`;
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.has_discrepancy !== undefined) params.append('has_discrepancy', String(filters.has_discrepancy));
+    if (params.toString()) url += `?${params.toString()}`;
+
+    const res = await fetch(url);
+    return res.json();
+}
+
+export async function getTransfer(transferId: string) {
+    const res = await fetch(`${API_BASE}/api/transfers/${transferId}`);
+    return res.json();
+}
+
+export async function getPendingTransfers() {
+    const res = await fetch(`${API_BASE}/api/transfers/pending/list`);
+    return res.json();
+}
+
+export async function getAnomalousTransfers() {
+    const res = await fetch(`${API_BASE}/api/transfers/anomalies/list`);
+    return res.json();
+}
+
+export async function createTransfer(data: {
+    medicine_id: string;
+    quantity: number;
+    from_district_id: string;
+    to_district_id: string;
+    priority?: string;
+    created_by: string;
+}) {
+    const res = await fetch(`${API_BASE}/api/transfers/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+
+export async function recordPickup(transferId: string, data: {
+    transporter_id: string;
+    pickup_location_lat?: number;
+    pickup_location_lng?: number;
+}) {
+    const res = await fetch(`${API_BASE}/api/transfers/${transferId}/pickup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+
+export async function recordDelivery(transferId: string, data: {
+    receiver_id: string;
+    received_quantity: number;
+    delivery_location_lat?: number;
+    delivery_location_lng?: number;
+    receiver_notes?: string;
+}) {
+    const res = await fetch(`${API_BASE}/api/transfers/${transferId}/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+
+export async function verifyTransfer(transferId: string) {
+    const res = await fetch(`${API_BASE}/api/transfers/${transferId}/verify`);
+    return res.json();
+}
+
 // Helper function for risk level colors
 export function getRiskColor(level: string): string {
     switch (level) {
@@ -157,3 +266,4 @@ export function getRiskEmoji(level: string): string {
         default: return '⚪';
     }
 }
+

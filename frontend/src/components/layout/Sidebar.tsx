@@ -8,6 +8,7 @@ import {
     AlertTriangle,
     Sliders,
     Activity,
+    Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const navItems = [
     { href: "/district/RJ-JP", label: "District Analysis", icon: MapPin },
     { href: "/alerts", label: "Threat Detection", icon: AlertTriangle },
     { href: "/simulator", label: "Scenario Engine", icon: Sliders },
+    { href: "/transfers", label: "Transfer Verification", icon: Shield },
 ];
 
 export default function Sidebar() {
