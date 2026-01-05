@@ -1,5 +1,6 @@
 """
 Recommendations API Router
+With Network Optimization and Causal Context
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -7,6 +8,30 @@ from typing import Optional
 from datetime import datetime
 
 router = APIRouter()
+
+
+@router.get("/network")
+async def get_network_optimization():
+    """
+    FIRST PRINCIPLES: Optimize the entire network, not individual districts
+    Returns transfers and orders that minimize total system cost
+    """
+    forecaster = get_forecaster()
+    
+    plan = forecaster.optimize_network_transfers()
+    
+    total_transfer_savings = sum(t.get('cost_saved', 0) for t in plan['transfers'])
+    
+    return {
+        'network_plan': plan,
+        'summary': {
+            'total_transfers': len(plan['transfers']),
+            'total_orders': len(plan['orders']),
+            'estimated_savings': total_transfer_savings
+        },
+        'note': 'Transfers are prioritized over procurement to use existing surplus',
+        'generated_at': datetime.now().isoformat()
+    }
 
 
 def get_forecaster():
